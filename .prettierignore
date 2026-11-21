@@ -14,7 +14,7 @@ build
 package
 target
 src-tauri/target
-src-tauri/gen
+src-tauri/app/gen
 
 # Lockfiles / misc
 pnpm-lock.yaml

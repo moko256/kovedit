@@ -37,7 +37,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-          rust-src-dir: .
+          rust-src-dir: src-tauri
 
       - name: Install Tauri Linux dependencies
         run: |
