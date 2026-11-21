@@ -1,0 +1,17 @@
+{
+  "name": "kovedit",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "vite",
+      "command": "pnpm dev",
+      "description": "SvelteKit/Vite frontend (port 1420)"
+    }
+  ],
+  "ports": [
+    {
+      "name": "vite",
+      "port": 1420
+    }
+  ]
+}
