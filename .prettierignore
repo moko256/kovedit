@@ -1,0 +1,21 @@
+# Dependencies
+node_modules
+
+# Skills install dirs
+skills
+.agents/skills
+.claude/skills
+.cursor/skills
+
+# Build / generated output
+dist
+build
+.svelte-kit
+package
+target
+src-tauri/target
+
+# Lockfiles / misc
+pnpm-lock.yaml
+Cargo.lock
+*.timestamp-*
