@@ -1,0 +1,59 @@
+# npm/JS/Svelte checks. Fails the job on any non-zero exit.
+# Hardened for untrusted PR code: pull_request (not pull_request_target),
+# read-only permissions, no persisted checkout credentials, no secrets.
+
+name: CI npm
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'src/**'
+      - 'static/**'
+      - 'svelte.config.*'
+      - 'vite.config.*'
+      - 'tsconfig.*'
+      - 'eslint.config.*'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci-npm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-npm-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6.1.1
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # JS half of `pnpm format:check` (prettier --check .).
+      # Rust half (rustfmt) runs in ci-rust.yml.
+      - name: Format
+        run: pnpm exec prettier --check .
+
+      # JS half of `pnpm lint` (svelte-check + eslint). Dylint runs in ci-rust.yml.
+      - name: Lint
+        run: pnpm check && pnpm exec eslint .

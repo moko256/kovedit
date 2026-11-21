@@ -1,17 +1,24 @@
-# PR checks: format → lint → test. Fails the job on any non-zero exit.
+# Rust/Tauri checks. Fails the job on any non-zero exit.
 # Hardened for untrusted PR code: pull_request (not pull_request_target),
 # read-only permissions, no persisted checkout credentials, no secrets.
+#
+# Path filter covers src-tauri/** (workspace root, app/, and lints/).
 
-name: CI
+name: CI rust
 
 on:
   pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'package.json'
+      - '.github/workflows/ci-rust.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-rust-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,15 +30,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-
-      - uses: pnpm/action-setup@v6.1.1
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
 
       - uses: actions-rust-lang/setup-rust-toolchain@v2.0.1
         with:
@@ -52,14 +50,14 @@ jobs:
       - name: Install Dylint
         run: cargo install cargo-dylint dylint-link --locked
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      # Rust half of `pnpm format:check`.
       - name: Format
-        run: pnpm format:check
+        run: rustfmt --check src-tauri/app/build.rs src-tauri/app/src/*.rs src-tauri/lints/no_source_comments/src/*.rs
 
+      # Rust half of `pnpm lint` / `pnpm lint:comments`.
       - name: Lint
-        run: pnpm lint
+        run: cargo dylint --all --manifest-path src-tauri/Cargo.toml -- --all-targets
 
+      # Same command as `pnpm test` in package.json.
       - name: Test
-        run: pnpm test
+        run: cargo test -p kovedit --manifest-path src-tauri/Cargo.toml
