@@ -4,13 +4,20 @@
 version: 'v0.0.3'
 workflows:
     '.github/workflows/ci.yml':
+        - 'actions-rust-lang/setup-rust-toolchain@v2.0.1'
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@v7.1.0'
-        - 'dtolnay/rust-toolchain@stable'
         - 'pnpm/action-setup@v6.1.1'
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@v7.0.1'
 dependencies:
+    'actions-rust-lang/setup-rust-toolchain@v2.0.1':
+        ref: 'v2.0.1'
+        commit: 'sha1-a188e68d0fd2bd36ad51dccb2b07ba6e75105f30'
+        owner_id: 103899579
+        repo_id: 482610590
+        uses:
+            - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
     'actions/checkout@v7.0.1':
         ref: 'v7.0.1'
         commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
@@ -21,13 +28,13 @@ dependencies:
         commit: 'sha1-949feb2413d6458794dcd2491c4babbbce0c15c1'
         owner_id: 44036562
         repo_id: 189476904
-    'dtolnay/rust-toolchain@stable':
-        ref: 'stable'
-        commit: 'sha1-39008827e6b4319a349e9a42dfc90579dd25f1ca'
-        owner_id: 1940490
-        repo_id: 260749683
     'pnpm/action-setup@v6.1.1':
         ref: 'v6.1.1'
         commit: 'sha1-73e46992e05b19abd31f2f3c20e0e7370d762115'
         owner_id: 21320719
         repo_id: 262289747
+    'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0':
+        ref: 'v2.9.3'
+        commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+        owner_id: 580492
+        repo_id: 298565987
