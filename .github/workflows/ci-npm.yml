@@ -1,17 +1,29 @@
-# PR checks: format → lint → test. Fails the job on any non-zero exit.
+# npm/JS/Svelte checks. Fails the job on any non-zero exit.
 # Hardened for untrusted PR code: pull_request (not pull_request_target),
 # read-only permissions, no persisted checkout credentials, no secrets.
 
-name: CI
+name: CI npm
 
 on:
   pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'src/**'
+      - 'static/**'
+      - 'svelte.config.*'
+      - 'vite.config.*'
+      - 'tsconfig.*'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci-npm.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-npm-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,30 +45,13 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v2.0.1
-        with:
-          toolchain: stable
-          components: rustfmt
-          rust-src-dir: src-tauri
-
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # JS half of `pnpm format:check` (prettier --check .).
+      # Rust half (rustfmt) runs in ci-rust.yml.
       - name: Format
-        run: pnpm format:check
+        run: pnpm exec prettier --check .
 
       - name: Lint
         run: pnpm lint
-
-      - name: Test
-        run: pnpm test
