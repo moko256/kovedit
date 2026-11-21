@@ -30,4 +30,10 @@ Source comments are banned in Rust, TypeScript, JavaScript, and Svelte `<script>
 pnpm lint
 ```
 
-That runs `svelte-check`, ESLint (`eslint-plugin-no-comments`), and `scripts/check-no-rust-comments.mjs`. Clippy has no lint that forbids comments, so the Rust check is a small scanner over `src-tauri/src` and `src-tauri/build.rs`.
+That runs `svelte-check`, ESLint (`eslint-plugin-no-comments`), and `cargo dylint` (`lints/no_source_comments`). Clippy has no lint that forbids comments; the Rust side is a Cargo workspace with the Tauri app (`src-tauri`) and a Dylint library (`lints/no_source_comments`).
+
+Install the Dylint runners once:
+
+```sh
+cargo install cargo-dylint dylint-link --locked
+```

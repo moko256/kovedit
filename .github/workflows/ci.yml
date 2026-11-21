@@ -37,7 +37,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-          rust-src-dir: src-tauri
+          rust-src-dir: .
 
       - name: Install Tauri Linux dependencies
         run: |
@@ -48,6 +48,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+
+      - name: Install Dylint
+        run: cargo install cargo-dylint dylint-link --locked
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
