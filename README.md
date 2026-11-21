@@ -21,3 +21,13 @@ To install hooks without a full reinstall:
 ```bash
 pnpm prepare
 ```
+
+## Lint
+
+Source comments are banned in Rust, TypeScript, JavaScript, and Svelte `<script>` blocks (express intent in code). Prettier cannot enforce that; use the linters instead:
+
+```sh
+pnpm lint
+```
+
+That runs `svelte-check`, ESLint (`eslint-plugin-no-comments`), and `scripts/check-no-rust-comments.mjs`. Clippy has no lint that forbids comments, so the Rust check is a small scanner over `src-tauri/src` and `src-tauri/build.rs`.

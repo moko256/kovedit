@@ -10,7 +10,8 @@
     "prepare": "svelte-kit sync || echo '' && husky",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "lint": "pnpm check",
+    "lint": "pnpm check && pnpm lint:comments",
+    "lint:comments": "eslint . && node scripts/check-no-rust-comments.mjs",
     "format": "prettier --write . && rustfmt src-tauri/build.rs src-tauri/src/*.rs",
     "format:check": "prettier --check . && rustfmt --check src-tauri/build.rs src-tauri/src/*.rs",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
@@ -26,12 +27,17 @@
     "@sveltejs/kit": "^2.65.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "eslint-plugin-no-comments": "^1.2.1",
+    "eslint-plugin-svelte": "^3.24.1",
     "husky": "^9.1.7",
     "prettier": "^3.10.1",
     "prettier-plugin-svelte": "^4.2.0",
     "svelte": "^5.56.3",
     "svelte-check": "^4.6.0",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
     "vite": "^8.0.16"
   }
 }
