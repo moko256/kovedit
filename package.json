@@ -13,6 +13,7 @@
     "lint": "pnpm check",
     "format": "prettier --write . && rustfmt src-tauri/build.rs src-tauri/src/*.rs",
     "format:check": "prettier --check . && rustfmt --check src-tauri/build.rs src-tauri/src/*.rs",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri"
   },
   "license": "MIT",
