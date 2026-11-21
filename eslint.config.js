@@ -27,6 +27,7 @@ export default [
       ".cursor/skills/**",
       "pnpm-lock.yaml",
       "src-tauri/Cargo.lock",
+      "vite.config.js",
     ],
   },
   {
