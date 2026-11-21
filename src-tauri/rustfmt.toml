@@ -1,0 +1,3 @@
+# Use rustfmt defaults for the Tauri/Rust side of the project.
+# Invoked via package.json format scripts (rustfmt on src paths).
+# Skips target/ and other build output by only formatting source files.
