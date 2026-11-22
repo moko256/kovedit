@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
@@ -42,7 +44,8 @@
 
 <section class="timeline">
   <header class="timeline__header">Timeline</header>
-  <div class="timeline__scroll">
+  <Separator />
+  <ScrollArea class="timeline__scroll" orientation="both">
     <div class="timeline__canvas">
       <TimelineRuler
         {maxFrames}
@@ -70,7 +73,7 @@
         labelOffsetRem={3}
       />
     </div>
-  </div>
+  </ScrollArea>
 </section>
 
 <style>
@@ -86,7 +89,6 @@
   .timeline__header {
     flex: 0 0 auto;
     padding: 0.45rem 0.75rem;
-    border-bottom: 1px solid #c5cbd3;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -95,9 +97,8 @@
     background: #e2e6eb;
   }
 
-  .timeline__scroll {
+  :global(.timeline__scroll) {
     flex: 1 1 auto;
-    overflow: auto;
     min-height: 0;
   }
 

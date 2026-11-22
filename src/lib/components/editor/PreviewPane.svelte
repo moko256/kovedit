@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import { activeClipAtPlayhead } from "#lib/editor/playhead.js";
@@ -50,6 +51,7 @@
 
 <section class="preview-pane">
   <header class="preview-pane__header">Preview</header>
+  <Separator />
   <div class="preview-pane__stage">
     <video
       class="preview-pane__video"
@@ -79,7 +81,6 @@
   .preview-pane__header {
     flex: 0 0 auto;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #c5cbd3;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;

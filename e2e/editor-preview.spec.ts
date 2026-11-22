@@ -96,7 +96,11 @@ test("preview uses DOM video and transport works", async ({
   await expect(video).toHaveClass(/preview-pane__video--visible/);
 
   const seek = page.getByRole("slider", { name: "Seek" });
-  await seek.fill("30");
+  await seek.focus();
+  await page.keyboard.press("Home");
+  for (let i = 0; i < 30; i++) {
+    await page.keyboard.press("ArrowRight");
+  }
   await expect(page.locator(".transport__frame")).toHaveText("30f");
   await expect
     .poll(async () => video.evaluate((el: HTMLVideoElement) => el.currentTime))

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import { clipName, clipPath, isClipNode } from "#lib/editor/types.js";
 
@@ -26,20 +28,23 @@
 
 <section class="properties-pane">
   <header class="properties-pane__header">Properties</header>
-  <div class="properties-pane__body">
-    {#if selected}
-      <dl class="properties-pane__list">
-        <div class="properties-pane__row">
-          <dt>Name</dt>
-          <dd>{selected.name}</dd>
-        </div>
-        <div class="properties-pane__row">
-          <dt>Path</dt>
-          <dd class="properties-pane__path">{selected.path}</dd>
-        </div>
-      </dl>
-    {/if}
-  </div>
+  <Separator />
+  <ScrollArea class="properties-pane__scroll" orientation="vertical">
+    <div class="properties-pane__body">
+      {#if selected}
+        <dl class="properties-pane__list">
+          <div class="properties-pane__row">
+            <dt>Name</dt>
+            <dd>{selected.name}</dd>
+          </div>
+          <div class="properties-pane__row">
+            <dt>Path</dt>
+            <dd class="properties-pane__path">{selected.path}</dd>
+          </div>
+        </dl>
+      {/if}
+    </div>
+  </ScrollArea>
 </section>
 
 <style>
@@ -55,7 +60,6 @@
   .properties-pane__header {
     flex: 0 0 auto;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #c5cbd3;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -64,10 +68,13 @@
     background: #e2e6eb;
   }
 
-  .properties-pane__body {
+  :global(.properties-pane__scroll) {
     flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .properties-pane__body {
     padding: 0.75rem;
-    overflow: auto;
   }
 
   .properties-pane__list {
