@@ -15,6 +15,11 @@ package
 target
 src-tauri/target
 src-tauri/app/gen
+test-results
+playwright-report
+blob-report
+.playwright
+.playwright-cli
 
 # Lockfiles / misc
 pnpm-lock.yaml

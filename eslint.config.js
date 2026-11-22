@@ -28,6 +28,11 @@ export default [
       "pnpm-lock.yaml",
       "src-tauri/Cargo.lock",
       "vite.config.js",
+      "test-results/**",
+      "playwright-report/**",
+      "blob-report/**",
+      ".playwright/**",
+      ".playwright-cli/**",
     ],
   },
   {
