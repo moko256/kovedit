@@ -1,3 +1,6 @@
+const SEEK_EPSILON = 1 / 120;
+const PLAY_DRIFT_SECONDS = 0.25;
+
 export class VideoPreviewSession {
   #path = "";
   #generation = 0;
@@ -6,14 +9,33 @@ export class VideoPreviewSession {
     target: HTMLVideoElement,
     path: string,
     timeSeconds: number,
+    playing: boolean,
   ): Promise<boolean> {
-    const ready = await this.#ensure(target, path);
+    const ready = await this.#ensure(target, path, playing);
     if (!ready) {
       return false;
     }
     const generation = this.#generation;
     const nextTime = Math.max(0, timeSeconds);
-    if (Math.abs(target.currentTime - nextTime) > 1 / 120) {
+    if (playing) {
+      const drift = Math.abs(target.currentTime - nextTime);
+      if (drift > PLAY_DRIFT_SECONDS) {
+        await this.#seek(target, nextTime, generation);
+      }
+      if (generation !== this.#generation || target.error) {
+        return false;
+      }
+      if (target.paused) {
+        try {
+          await target.play();
+        } catch {
+          return generation === this.#generation && !target.error;
+        }
+      }
+      return generation === this.#generation && !target.error;
+    }
+    target.pause();
+    if (Math.abs(target.currentTime - nextTime) > SEEK_EPSILON) {
       await this.#seek(target, nextTime, generation);
     }
     return generation === this.#generation && !target.error;
@@ -32,13 +54,19 @@ export class VideoPreviewSession {
     this.#path = "";
   }
 
-  async #ensure(target: HTMLVideoElement, path: string): Promise<boolean> {
+  async #ensure(
+    target: HTMLVideoElement,
+    path: string,
+    playing: boolean,
+  ): Promise<boolean> {
     if (!path) {
       this.clear(target);
       return false;
     }
     if (path === this.#path && target.currentSrc) {
-      target.pause();
+      if (!playing) {
+        target.pause();
+      }
       return !target.error;
     }
     this.#generation += 1;
@@ -73,7 +101,7 @@ export class VideoPreviewSession {
       duration !== null && duration > 0
         ? Math.min(timeSeconds, Math.max(0, duration - 0.001))
         : timeSeconds;
-    if (Math.abs(target.currentTime - clamped) <= 1 / 120) {
+    if (Math.abs(target.currentTime - clamped) <= SEEK_EPSILON) {
       return;
     }
     target.currentTime = clamped;
