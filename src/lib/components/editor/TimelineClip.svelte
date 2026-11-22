@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { MainAction } from "$lib/editor/MainAction.svelte";
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { clipName, type ClipNode } from "$lib/editor/types";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { clipName, type ClipNode } from "#lib/editor/types.js";
 
   let {
     clip,

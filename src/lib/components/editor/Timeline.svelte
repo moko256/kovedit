@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { MainAction } from "$lib/editor/MainAction.svelte";
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { playheadToTimelineFrames, projectFps } from "$lib/editor/fps";
-  import { totalTrackFrames } from "$lib/editor/track-layout";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
+  import { totalTrackFrames } from "#lib/editor/track-layout.js";
   import {
     MIN_TRACK_FRAMES,
     PIXELS_PER_FRAME,
