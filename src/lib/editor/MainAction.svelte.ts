@@ -59,6 +59,9 @@ export class MainAction {
     };
 
     const items = insertClipAtFrame(track.items, clip, frame);
+    if (items === null) {
+      return;
+    }
     const nextTrack: VideoTrack = { type: "video", items };
     tracks[index] = nextTrack;
     this.#store.project = { ...project, tracks };
@@ -97,6 +100,9 @@ export class MainAction {
       itemIndex,
       Math.max(0, newStartFrame),
     );
+    if (items === track.items) {
+      return;
+    }
     const tracks = [...project.tracks];
     tracks[trackIndex] = { type: "video", items };
     this.#store.project = { ...project, tracks };

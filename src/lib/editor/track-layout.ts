@@ -77,13 +77,15 @@ function compactItems(items: TrackItem[]): TrackItem[] {
   return result;
 }
 
-function removeItemMergingSpaces(
+function removeClipLeavingHole(
   items: TrackItem[],
   itemIndex: number,
+  durationFrames: number,
 ): TrackItem[] {
   const result: TrackItem[] = [];
   for (let i = 0; i < items.length; i++) {
     if (i === itemIndex) {
+      pushSpace(result, durationFrames);
       continue;
     }
     const item = items[i];
@@ -100,10 +102,11 @@ export function insertClipAtFrame(
   items: TrackItem[],
   clip: ClipNode,
   targetFrame: number,
-): TrackItem[] {
+): TrackItem[] | null {
   const frame = Math.max(0, Math.floor(targetFrame));
   const layout = layoutTrack(items);
   const total = totalTrackFrames(items);
+  const duration = clipDurationFrames(clip);
 
   if (frame >= total) {
     const result = compactItems(items);
@@ -119,8 +122,15 @@ export function insertClipAtFrame(
     }
 
     if (entry.kind === "space") {
-      const before = frame - entry.startFrame;
-      const after = end - frame;
+      if (duration > entry.lengthFrames) {
+        return null;
+      }
+      let before = frame - entry.startFrame;
+      const maxBefore = entry.lengthFrames - duration;
+      if (before > maxBefore) {
+        before = maxBefore;
+      }
+      const after = entry.lengthFrames - before - duration;
       const result: TrackItem[] = [];
       for (let i = 0; i < items.length; i++) {
         if (i !== entry.itemIndex) {
@@ -139,19 +149,7 @@ export function insertClipAtFrame(
       return result;
     }
 
-    const result: TrackItem[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (i === entry.itemIndex) {
-        result.push(clip);
-      }
-      const item = items[i];
-      if (isSpaceNode(item)) {
-        pushSpace(result, item.space);
-      } else {
-        result.push(item);
-      }
-    }
-    return result;
+    return null;
   }
 
   const fallback = compactItems(items);
@@ -171,10 +169,12 @@ export function moveClipToFrame(
   if (!isClipNode(clip)) {
     return items;
   }
-  const without = removeItemMergingSpaces(items, itemIndex);
-  return insertClipAtFrame(
+  const duration = clipDurationFrames(clip);
+  const without = removeClipLeavingHole(items, itemIndex, duration);
+  const next = insertClipAtFrame(
     without,
     clip,
     Math.max(0, Math.floor(newStartFrame)),
   );
+  return next ?? items;
 }
