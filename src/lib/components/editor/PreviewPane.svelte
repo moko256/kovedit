@@ -1,41 +1,62 @@
 <script lang="ts">
+  import type { MainAction } from "$lib/editor/MainAction.svelte";
   import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { clipPath, isClipNode } from "$lib/editor/types";
+  import { activeClipAtPlayhead } from "$lib/editor/playhead";
+  import { VideoPreviewSession } from "$lib/editor/video-preview";
+  import PreviewTransport from "./PreviewTransport.svelte";
 
-  let { store }: { store: MainStore } = $props();
+  let { store, action }: { store: MainStore; action: MainAction } = $props();
 
-  let previewSrc = $derived.by(() => {
-    const selection = store.selection;
-    if (!selection) {
-      return "";
+  let canvasEl: HTMLCanvasElement | undefined = $state();
+  let session = new VideoPreviewSession();
+  let hasFrame = $state(false);
+
+  let active = $derived(
+    activeClipAtPlayhead(store.project, store.playheadFrame),
+  );
+
+  $effect(() => {
+    const clip = active;
+    const target = canvasEl;
+    if (!target) {
+      return;
     }
-    const track = store.project.tracks[selection.trackIndex];
-    if (!track) {
-      return "";
+    if (!clip) {
+      session.clear(target);
+      hasFrame = false;
+      return;
     }
-    const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return "";
-    }
-    return clipPath(item);
+    let cancelled = false;
+    void session.draw(target, clip.path, clip.mediaTimeSeconds).then((ok) => {
+      if (!cancelled) {
+        hasFrame = ok;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
+    return () => {
+      session.dispose();
+    };
   });
 </script>
 
 <section class="preview-pane">
   <header class="preview-pane__header">Preview</header>
   <div class="preview-pane__stage">
-    {#if previewSrc}
-      <video
-        class="preview-pane__video"
-        src={previewSrc}
-        controls
-        muted
-        playsinline
-      ></video>
-    {:else}
+    <canvas
+      class="preview-pane__canvas"
+      class:preview-pane__canvas--visible={hasFrame}
+      bind:this={canvasEl}
+    ></canvas>
+    {#if !hasFrame}
       <p class="preview-pane__empty">Preview</p>
     {/if}
   </div>
+  <PreviewTransport {store} {action} />
 </section>
 
 <style>
@@ -61,6 +82,7 @@
   }
 
   .preview-pane__stage {
+    position: relative;
     flex: 1 1 auto;
     display: grid;
     place-items: center;
@@ -68,17 +90,22 @@
     background: linear-gradient(180deg, #f7f8fa 0%, #e8ebf0 100%);
   }
 
-  .preview-pane__video {
-    width: 100%;
-    height: 100%;
+  .preview-pane__canvas {
+    max-width: 100%;
     max-height: 100%;
-    object-fit: contain;
     background: #111418;
+    opacity: 0;
+  }
+
+  .preview-pane__canvas--visible {
+    opacity: 1;
   }
 
   .preview-pane__empty {
+    position: absolute;
     margin: 0;
     color: #7a8490;
     font-size: 0.95rem;
+    pointer-events: none;
   }
 </style>

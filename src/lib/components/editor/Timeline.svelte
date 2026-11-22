@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { MainAction } from "$lib/editor/MainAction.svelte";
   import type { MainStore } from "$lib/editor/MainStore.svelte";
+  import { playheadToTimelineFrames, projectFps } from "$lib/editor/fps";
   import { totalTrackFrames } from "$lib/editor/track-layout";
   import {
     MIN_TRACK_FRAMES,
     PIXELS_PER_FRAME,
     RULER_STEP,
   } from "./timelineConstants";
+  import TimelinePlayhead from "./TimelinePlayhead.svelte";
   import TimelineRuler from "./TimelineRuler.svelte";
   import TimelineTrackRow from "./TimelineTrackRow.svelte";
 
@@ -29,6 +31,13 @@
     }
     return marks;
   });
+
+  let playheadTimelineFrame = $derived(
+    playheadToTimelineFrames(
+      store.playheadFrame,
+      projectFps(store.project.info),
+    ),
+  );
 </script>
 
 <section class="timeline">
@@ -53,6 +62,13 @@
           />
         {/each}
       </div>
+
+      <TimelinePlayhead
+        {playheadTimelineFrame}
+        pixelsPerFrame={PIXELS_PER_FRAME}
+        {maxFrames}
+        labelOffsetRem={3}
+      />
     </div>
   </div>
 </section>
@@ -86,6 +102,7 @@
   }
 
   .timeline__canvas {
+    position: relative;
     width: max-content;
     min-width: 100%;
     min-height: 100%;

@@ -11,7 +11,7 @@
 
 <div class="editor-shell">
   <div class="editor-shell__top">
-    <PreviewPane {store} />
+    <PreviewPane {store} {action} />
     <PropertiesPane {store} />
   </div>
   <div class="editor-shell__bottom">
