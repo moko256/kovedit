@@ -1,5 +1,4 @@
 const SEEK_EPSILON = 1 / 120;
-const PLAY_DRIFT_SECONDS = 0.25;
 
 export class VideoPreviewSession {
   #path = "";
@@ -18,14 +17,11 @@ export class VideoPreviewSession {
     const generation = this.#generation;
     const nextTime = Math.max(0, timeSeconds);
     if (playing) {
-      const drift = Math.abs(target.currentTime - nextTime);
-      if (drift > PLAY_DRIFT_SECONDS) {
+      if (target.paused || target.ended) {
         await this.#seek(target, nextTime, generation);
-      }
-      if (generation !== this.#generation || target.error) {
-        return false;
-      }
-      if (target.paused) {
+        if (generation !== this.#generation || target.error) {
+          return false;
+        }
         try {
           await target.play();
         } catch {
