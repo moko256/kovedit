@@ -12,6 +12,8 @@ import type { ClipNode, ClipSelection, VideoTrack } from "./types";
 export class MainAction {
   #store: MainStore;
   #timer: ReturnType<typeof setInterval> | null = null;
+  #playOriginMs = 0;
+  #playOriginFrame = 0;
 
   constructor(store: MainStore) {
     this.#store = store;
@@ -146,6 +148,8 @@ export class MainAction {
 
   #startTimer = (): void => {
     this.#clearTimer();
+    this.#playOriginMs = performance.now();
+    this.#playOriginFrame = this.#store.playheadFrame;
     this.#timer = setInterval(() => {
       this.#tick();
     }, 1000 / PLAYHEAD_FPS);
@@ -168,7 +172,9 @@ export class MainAction {
       this.stop();
       return;
     }
-    const next = this.#store.playheadFrame + 1;
+    const elapsedSeconds = (performance.now() - this.#playOriginMs) / 1000;
+    const next =
+      this.#playOriginFrame + Math.floor(elapsedSeconds * PLAYHEAD_FPS);
     if (next >= max) {
       this.#store.playheadFrame = max;
       this.stop();
