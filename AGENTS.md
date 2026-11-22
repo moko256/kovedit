@@ -30,4 +30,4 @@ Screenshots/video foundation for UI work: `docs/playwright.md`. Run `pnpm test:e
 
 ## Cursor Cloud specific instructions
 
-Cloud Agents use the repo-managed environment at `.cursor/environment.json` (install via `.cursor/install.sh`: Rust stable + rustfmt/clippy, cargo-dylint + dylint-link, Tauri Linux deps, `pnpm install`, Playwright Chromium + deps, `playwright-cli` agent skills, `cargo fetch`). Frontend: `pnpm dev` on port 1420. After install script changes, trigger a new environment build so the snapshot picks them up.
+Cloud Agents use the repo-managed environment at `.cursor/environment.json` (install via `.cursor/install.sh`: Rust stable + rustfmt/clippy, cargo-dylint + dylint-link, Tauri Linux deps, `pnpm install`, Playwright Chromium + deps, `playwright-cli` agent skills, `cargo fetch`). On boot, `.cursor/start.sh` runs `pnpm dev` on port 1420 when that port is free. After install script changes, trigger a new environment build so the snapshot picks them up.
