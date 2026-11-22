@@ -26,7 +26,9 @@
     grid-template-rows: 1fr 40%;
     gap: 0.5rem;
     width: 100%;
+    max-width: 100%;
     height: 100vh;
+    overflow: hidden;
     padding: 0.5rem;
     background: #d8dde4;
     color: #1f2933;
@@ -38,16 +40,22 @@
     grid-template-columns: 1.4fr 1fr;
     gap: 0.5rem;
     min-height: 0;
+    min-width: 0;
   }
 
   .editor-shell__bottom {
+    display: flex;
+    flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
   }
 
   :global(html),
   :global(body) {
     margin: 0;
     height: 100%;
+    overflow: hidden;
     background: #d8dde4;
   }
 </style>
