@@ -10,7 +10,6 @@ on:
   pull_request:
     paths:
       - "src-tauri/**"
-      - "package.json"
       - ".github/workflows/ci-rust.yml"
   workflow_dispatch:
 

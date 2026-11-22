@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { MainAction } from "$lib/editor/MainAction.svelte";
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { maxPlayheadFrames } from "$lib/editor/playhead";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { maxPlayheadFrames } from "#lib/editor/playhead.js";
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();
 

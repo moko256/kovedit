@@ -44,6 +44,11 @@ pnpm install --frozen-lockfile
 pnpm exec playwright install --with-deps chromium
 pnpm exec playwright-cli install --skills=agents
 
+# cargo-dylint + dylint-link: pnpm lint:rust / husky pre-push / CI rust (ci-rust.yml).
+if ! command -v cargo-dylint >/dev/null 2>&1 || ! command -v dylint-link >/dev/null 2>&1; then
+  cargo install cargo-dylint dylint-link --locked
+fi
+
 if [[ -f src-tauri/Cargo.toml ]]; then
   (cd src-tauri && cargo fetch)
 fi
