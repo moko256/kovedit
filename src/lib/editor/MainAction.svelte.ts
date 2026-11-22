@@ -1,8 +1,12 @@
-import { PLAYHEAD_FPS } from "./fps";
+import { PLAYHEAD_FPS, projectFps, timelineFramesToPlayhead } from "./fps";
 import { durationFramesForFile } from "./media";
 import type { MainStore } from "./MainStore.svelte";
 import { maxPlayheadFrames } from "./playhead";
-import { insertClipAtFrame, moveClipToFrame } from "./track-layout";
+import {
+  insertClipAtFrame,
+  itemStartFrame,
+  moveClipToFrame,
+} from "./track-layout";
 import type { ClipNode, ClipSelection, VideoTrack } from "./types";
 
 export class MainAction {
@@ -62,6 +66,11 @@ export class MainAction {
     const itemIndex = items.indexOf(clip);
     if (itemIndex >= 0) {
       this.#store.selection = { trackIndex: index, itemIndex };
+      const startFrame = itemStartFrame(items, itemIndex);
+      this.#store.playheadFrame = timelineFramesToPlayhead(
+        startFrame,
+        projectFps(project.info),
+      );
     }
   };
 
