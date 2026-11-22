@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
+    "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "^1.77.0",
     "@playwright/cli": "^0.1.25",
     "@playwright/test": "^1.65.1",
@@ -43,6 +44,7 @@
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.6.6",
     "@typescript/native": "npm:typescript@7.0.2",
+    "bits-ui": "^2.22.0",
     "cn": "^0.5.2",
     "eslint": "^10.15.0",
     "eslint-plugin-no-comments": "^1.2.1",
