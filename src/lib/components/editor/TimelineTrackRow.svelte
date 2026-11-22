@@ -1,8 +1,12 @@
 <script lang="ts">
-  import type { MainAction } from "$lib/editor/MainAction.svelte";
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { layoutTrack } from "$lib/editor/track-layout";
-  import { isClipNode, isSpaceNode, type VideoTrack } from "$lib/editor/types";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { layoutTrack } from "#lib/editor/track-layout.js";
+  import {
+    isClipNode,
+    isSpaceNode,
+    type VideoTrack,
+  } from "#lib/editor/types.js";
   import TimelineClip from "./TimelineClip.svelte";
   import TimelineSpace from "./TimelineSpace.svelte";
 

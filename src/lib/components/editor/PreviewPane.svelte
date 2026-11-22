@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { MainAction } from "$lib/editor/MainAction.svelte";
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { activeClipAtPlayhead } from "$lib/editor/playhead";
-  import { VideoPreviewSession } from "$lib/editor/video-preview";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { activeClipAtPlayhead } from "#lib/editor/playhead.js";
+  import { VideoPreviewSession } from "#lib/editor/video-preview.js";
   import PreviewTransport from "./PreviewTransport.svelte";
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();

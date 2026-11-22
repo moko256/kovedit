@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { MainStore } from "$lib/editor/MainStore.svelte";
-  import { clipName, clipPath, isClipNode } from "$lib/editor/types";
+  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { clipName, clipPath, isClipNode } from "#lib/editor/types.js";
 
   let { store }: { store: MainStore } = $props();
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { MainAction } from "$lib/editor/MainAction.svelte";
-  import { MainStore } from "$lib/editor/MainStore.svelte";
+  import { MainAction } from "#lib/editor/MainAction.svelte.js";
+  import { MainStore } from "#lib/editor/MainStore.svelte.js";
   import PreviewPane from "./PreviewPane.svelte";
   import PropertiesPane from "./PropertiesPane.svelte";
   import Timeline from "./Timeline.svelte";
