@@ -14,10 +14,12 @@
   let active = $derived(
     activeClipAtPlayhead(store.project, store.playheadFrame),
   );
+  let playing = $derived(store.playing);
 
   $effect(() => {
     const clip = active;
     const target = videoEl;
+    const isPlaying = playing;
     if (!target) {
       return;
     }
@@ -27,11 +29,13 @@
       return;
     }
     let cancelled = false;
-    void session.show(target, clip.path, clip.mediaTimeSeconds).then((ok) => {
-      if (!cancelled) {
-        hasFrame = ok;
-      }
-    });
+    void session
+      .show(target, clip.path, clip.mediaTimeSeconds, isPlaying)
+      .then((ok) => {
+        if (!cancelled) {
+          hasFrame = ok;
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -87,15 +91,19 @@
   .preview-pane__stage {
     position: relative;
     flex: 1 1 auto;
-    display: grid;
-    place-items: center;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
     background: linear-gradient(180deg, #f7f8fa 0%, #e8ebf0 100%);
   }
 
   .preview-pane__video {
-    max-width: 100%;
-    max-height: 100%;
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     background: #111418;
     opacity: 0;
     pointer-events: none;

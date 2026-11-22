@@ -4,13 +4,17 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-const samplePath = path.join(
+const largePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  "assets/sample.mp4",
+  "assets/large.mp4",
 );
 
-async function dropSampleVideo(page: Page): Promise<void> {
-  const buffer = [...new Uint8Array(fs.readFileSync(samplePath))];
+async function dropVideo(
+  page: Page,
+  filePath: string,
+  name: string,
+): Promise<void> {
+  const buffer = [...new Uint8Array(fs.readFileSync(filePath))];
   const target = page.getByRole("region", { name: "Video track 1" });
   await expect(target).toBeVisible();
   await target.evaluate(
@@ -26,7 +30,7 @@ async function dropSampleVideo(page: Page): Promise<void> {
         }),
       );
     },
-    { bytes: buffer, name: "sample.mp4", type: "video/mp4" },
+    { bytes: buffer, name, type: "video/mp4" },
   );
 }
 
@@ -35,26 +39,55 @@ test("preview uses DOM video and transport works", async ({
   captureScreenshot,
 }) => {
   await page.goto("/");
-  await dropSampleVideo(page);
+  await dropVideo(page, largePath, "large.mp4");
 
   const video = page.locator(".preview-pane__video");
+  const stage = page.locator(".preview-pane__stage");
   await expect(video).toBeVisible();
   await expect(page.locator(".preview-pane canvas")).toHaveCount(0);
   await expect(video).toHaveClass(/preview-pane__video--visible/);
   await expect
+    .poll(async () => video.evaluate((el: HTMLVideoElement) => el.videoWidth))
+    .toBeGreaterThan(1280);
+  await expect
     .poll(async () => page.locator(".transport__frame").innerText())
     .toBe("0f");
 
+  await expect
+    .poll(async () => {
+      const videoBox = await video.boundingBox();
+      const stageBox = await stage.boundingBox();
+      if (!videoBox || !stageBox) {
+        return false;
+      }
+      return (
+        videoBox.x >= stageBox.x - 1 &&
+        videoBox.y >= stageBox.y - 1 &&
+        videoBox.x + videoBox.width <= stageBox.x + stageBox.width + 1 &&
+        videoBox.y + videoBox.height <= stageBox.y + stageBox.height + 1
+      );
+    })
+    .toBe(true);
+
   await page.getByRole("button", { name: "Play" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect
+    .poll(async () => video.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(false);
   await expect
     .poll(async () =>
       Number.parseInt(await page.locator(".transport__frame").innerText(), 10),
     )
     .toBeGreaterThan(5);
+  await expect
+    .poll(async () => video.evaluate((el: HTMLVideoElement) => el.currentTime))
+    .toBeGreaterThan(0.05);
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+  await expect
+    .poll(async () => video.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
   const frozenFrame = Number.parseInt(
     await page.locator(".transport__frame").innerText(),
     10,
@@ -68,6 +101,9 @@ test("preview uses DOM video and transport works", async ({
   await expect
     .poll(async () => video.evaluate((el: HTMLVideoElement) => el.currentTime))
     .toBeGreaterThan(0.4);
+  await expect
+    .poll(async () => video.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
 
-  await captureScreenshot("dom-preview-seek");
+  await captureScreenshot("dom-preview-fit-play");
 });
