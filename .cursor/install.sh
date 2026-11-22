@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent Cloud Agent install for kovedit (pnpm + Svelte + Tauri v2 + Rust).
+# Idempotent Cloud Agent install for kovedit (pnpm + Svelte + Tauri v2 + Rust + Playwright).
 set -euo pipefail
 
 # edition = "2024" in src-tauri requires rustc >= 1.85; base images may ship older.
@@ -40,6 +40,9 @@ if ! command -v pnpm >/dev/null 2>&1; then
 fi
 
 pnpm install --frozen-lockfile
+
+pnpm exec playwright install --with-deps chromium
+pnpm exec playwright-cli install --skills=agents
 
 if [[ -f src-tauri/Cargo.toml ]]; then
   (cd src-tauri && cargo fetch)
