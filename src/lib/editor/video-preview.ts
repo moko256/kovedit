@@ -1,100 +1,108 @@
-import {
-  ALL_FORMATS,
-  CanvasSink,
-  Input,
-  UrlSource,
-  type WrappedCanvas,
-} from "mediabunny";
-
 export class VideoPreviewSession {
   #path = "";
-  #input: Input | null = null;
-  #sink: CanvasSink | null = null;
   #generation = 0;
 
-  async draw(
-    target: HTMLCanvasElement,
+  async show(
+    target: HTMLVideoElement,
     path: string,
     timeSeconds: number,
   ): Promise<boolean> {
-    const sink = await this.#ensure(path);
-    if (!sink) {
+    const ready = await this.#ensure(target, path);
+    if (!ready) {
       return false;
     }
     const generation = this.#generation;
-    const wrapped = await sink.getCanvas(Math.max(0, timeSeconds));
-    if (generation !== this.#generation || !wrapped) {
-      return false;
+    const nextTime = Math.max(0, timeSeconds);
+    if (Math.abs(target.currentTime - nextTime) > 1 / 120) {
+      await this.#seek(target, nextTime, generation);
     }
-    this.#blit(target, wrapped);
-    return true;
+    return generation === this.#generation && !target.error;
   }
 
-  clear(target: HTMLCanvasElement): void {
-    const ctx = target.getContext("2d");
-    if (!ctx) {
-      return;
-    }
-    ctx.clearRect(0, 0, target.width, target.height);
+  clear(target: HTMLVideoElement): void {
+    this.#generation += 1;
+    this.#path = "";
+    target.pause();
+    target.removeAttribute("src");
+    target.load();
   }
 
   dispose(): void {
     this.#generation += 1;
     this.#path = "";
-    this.#sink = null;
-    const input = this.#input;
-    this.#input = null;
-    if (input) {
-      input.dispose();
-    }
   }
 
-  async #ensure(path: string): Promise<CanvasSink | null> {
-    if (path === this.#path && this.#sink) {
-      return this.#sink;
-    }
-    this.dispose();
+  async #ensure(target: HTMLVideoElement, path: string): Promise<boolean> {
     if (!path) {
-      return null;
+      this.clear(target);
+      return false;
     }
+    if (path === this.#path && target.currentSrc) {
+      target.pause();
+      return !target.error;
+    }
+    this.#generation += 1;
     const generation = this.#generation;
-    const input = new Input({
-      formats: ALL_FORMATS,
-      source: new UrlSource(path),
-    });
-    const videoTrack = await input.getPrimaryVideoTrack();
-    if (generation !== this.#generation) {
-      input.dispose();
-      return null;
-    }
-    if (!videoTrack || !(await videoTrack.canDecode())) {
-      input.dispose();
-      return null;
-    }
-    if (generation !== this.#generation) {
-      input.dispose();
-      return null;
-    }
-    const sink = new CanvasSink(videoTrack, { poolSize: 2 });
     this.#path = path;
-    this.#input = input;
-    this.#sink = sink;
-    return sink;
+    target.pause();
+    target.src = path;
+    target.load();
+    const loaded = await this.#waitEvent(target, "loadeddata", generation);
+    if (!loaded || generation !== this.#generation) {
+      return false;
+    }
+    return !target.error;
   }
 
-  #blit(target: HTMLCanvasElement, wrapped: WrappedCanvas): void {
-    const source = wrapped.canvas;
-    const width = source.width;
-    const height = source.height;
-    if (target.width !== width || target.height !== height) {
-      target.width = width;
-      target.height = height;
-    }
-    const ctx = target.getContext("2d");
-    if (!ctx) {
+  async #seek(
+    target: HTMLVideoElement,
+    timeSeconds: number,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.#generation) {
       return;
     }
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(source, 0, 0);
+    if (target.readyState < HTMLMediaElement.HAVE_METADATA) {
+      const ready = await this.#waitEvent(target, "loadedmetadata", generation);
+      if (!ready || generation !== this.#generation) {
+        return;
+      }
+    }
+    const duration = Number.isFinite(target.duration) ? target.duration : null;
+    const clamped =
+      duration !== null && duration > 0
+        ? Math.min(timeSeconds, Math.max(0, duration - 0.001))
+        : timeSeconds;
+    if (Math.abs(target.currentTime - clamped) <= 1 / 120) {
+      return;
+    }
+    target.currentTime = clamped;
+    await this.#waitEvent(target, "seeked", generation);
+  }
+
+  #waitEvent(
+    target: HTMLVideoElement,
+    type: "loadeddata" | "loadedmetadata" | "seeked",
+    generation: number,
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (generation !== this.#generation) {
+        resolve(false);
+        return;
+      }
+      const finish = (ok: boolean) => {
+        target.removeEventListener(type, onSuccess);
+        target.removeEventListener("error", onError);
+        resolve(ok && generation === this.#generation);
+      };
+      const onSuccess = () => {
+        finish(true);
+      };
+      const onError = () => {
+        finish(false);
+      };
+      target.addEventListener(type, onSuccess, { once: true });
+      target.addEventListener("error", onError, { once: true });
+    });
   }
 }

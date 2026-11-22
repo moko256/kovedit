@@ -7,7 +7,7 @@
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();
 
-  let canvasEl: HTMLCanvasElement | undefined = $state();
+  let videoEl: HTMLVideoElement | undefined = $state();
   let session = new VideoPreviewSession();
   let hasFrame = $state(false);
 
@@ -17,7 +17,7 @@
 
   $effect(() => {
     const clip = active;
-    const target = canvasEl;
+    const target = videoEl;
     if (!target) {
       return;
     }
@@ -27,7 +27,7 @@
       return;
     }
     let cancelled = false;
-    void session.draw(target, clip.path, clip.mediaTimeSeconds).then((ok) => {
+    void session.show(target, clip.path, clip.mediaTimeSeconds).then((ok) => {
       if (!cancelled) {
         hasFrame = ok;
       }
@@ -47,11 +47,14 @@
 <section class="preview-pane">
   <header class="preview-pane__header">Preview</header>
   <div class="preview-pane__stage">
-    <canvas
-      class="preview-pane__canvas"
-      class:preview-pane__canvas--visible={hasFrame}
-      bind:this={canvasEl}
-    ></canvas>
+    <video
+      class="preview-pane__video"
+      class:preview-pane__video--visible={hasFrame}
+      bind:this={videoEl}
+      muted
+      playsinline
+      preload="auto"
+    ></video>
     {#if !hasFrame}
       <p class="preview-pane__empty">Preview</p>
     {/if}
@@ -90,14 +93,15 @@
     background: linear-gradient(180deg, #f7f8fa 0%, #e8ebf0 100%);
   }
 
-  .preview-pane__canvas {
+  .preview-pane__video {
     max-width: 100%;
     max-height: 100%;
     background: #111418;
     opacity: 0;
+    pointer-events: none;
   }
 
-  .preview-pane__canvas--visible {
+  .preview-pane__video--visible {
     opacity: 1;
   }
 
