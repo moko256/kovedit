@@ -57,7 +57,9 @@
   {#if playing}
     <span class="transport__frame" aria-hidden="true"></span>
   {:else}
-    <span class="transport__frame" aria-live="polite">{store.playheadFrame}f</span>
+    <span class="transport__frame" aria-live="polite"
+      >{store.playheadFrame}f</span
+    >
   {/if}
 </div>
 
