@@ -58,17 +58,39 @@
     }
   }
 
-  function isSelected(itemIndex: number): boolean {
+  function isClipSelected(itemIndex: number): boolean {
     return (
       selection !== null &&
+      selection.type === "clip" &&
       selection.trackIndex === trackIndex &&
       selection.itemIndex === itemIndex
     );
   }
+
+  let trackSelected = $derived(
+    selection !== null &&
+      selection.type === "track" &&
+      selection.trackIndex === trackIndex,
+  );
+
+  function onSelectTrack(): void {
+    action.selectTrack(trackIndex);
+  }
 </script>
 
 <div class="track-row">
-  <div class="track-row__label">V{trackIndex + 1}</div>
+  <button
+    type="button"
+    class={[
+      "track-row__label",
+      { "track-row__label--selected": trackSelected },
+    ]}
+    aria-label="Select video track {trackIndex + 1}"
+    aria-pressed={trackSelected}
+    onclick={onSelectTrack}
+  >
+    V{trackIndex + 1}
+  </button>
   <div class="track-row__body">
     <div
       class="track-row__content"
@@ -92,7 +114,7 @@
             itemIndex={entry.itemIndex}
             startFrame={entry.startFrame}
             lengthFrames={entry.lengthFrames}
-            selected={isSelected(entry.itemIndex)}
+            selected={isClipSelected(entry.itemIndex)}
             {pixelsPerFrame}
             {store}
             {action}
@@ -115,11 +137,21 @@
   .track-row__label {
     display: grid;
     place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-right: 1px solid #c5cbd3;
+    font: inherit;
     font-size: 0.7rem;
     font-weight: 700;
     color: #52606d;
     background: #dde2e8;
-    border-right: 1px solid #c5cbd3;
+    cursor: pointer;
+  }
+
+  .track-row__label--selected {
+    color: #1f2933;
+    background: #c8d0da;
   }
 
   .track-row__body {

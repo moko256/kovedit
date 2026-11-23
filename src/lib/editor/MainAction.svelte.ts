@@ -1,9 +1,3 @@
-import {
-  COMPOSITION_DEFAULT_CENTER_X,
-  COMPOSITION_DEFAULT_CENTER_Y,
-  normalizeCompositionCenter,
-  type CompositionCenter,
-} from "./composition";
 import { PLAYHEAD_FPS, projectFps, timelineFramesToPlayhead } from "./fps";
 import {
   cloneTrackItems,
@@ -15,20 +9,39 @@ import { durationFramesForFile } from "./media";
 import type { MainStore } from "./MainStore.svelte";
 import { maxPlayheadFrames } from "./playhead";
 import {
+  aspectRatio,
+  channelAtOrDefault,
+  clonePropertyLayer,
+  evaluateChannel,
+  proportionalHeight,
+  proportionalWidth,
+  setChannelInterpolation,
+  upsertKeyframe,
+  writeChannel,
+  type ChannelValueMap,
+  type Interpolation,
+  type PropertyChannelId,
+  type PropertyLayer,
+} from "./properties";
+import {
   insertClipAtFrame,
   itemStartFrame,
   moveClipToFrame,
 } from "./track-layout";
 import {
-  CLIP_PROP_CENTER_X,
-  CLIP_PROP_CENTER_Y,
-  clipCenter,
+  clipPropertyLayer,
   cloneClipProperties,
+  cloneTrackProperties,
+  createVideoTrack,
   isClipNode,
   restoreClipProperties,
+  restoreTrackProperties,
+  setClipPropertyLayer,
   type ClipNode,
   type ClipSelection,
+  type EditorSelection,
   type TrackItem,
+  type TrackSelection,
   type VideoTrack,
 } from "./types";
 
@@ -49,8 +62,16 @@ export class MainAction {
     this.#store = store;
   }
 
-  selectClip = (selection: ClipSelection | null): void => {
-    this.#store.selection = selection;
+  selectClip = (selection: Omit<ClipSelection, "type"> | null): void => {
+    if (!selection) {
+      this.#store.selection = null;
+      return;
+    }
+    this.#store.selection = { type: "clip", ...selection };
+  };
+
+  selectTrack = (trackIndex: number): void => {
+    this.#store.selection = { type: "track", trackIndex };
   };
 
   ensureVideoTrack = (): void => {
@@ -59,7 +80,7 @@ export class MainAction {
     }
     this.#store.project = {
       ...this.#store.project,
-      tracks: [{ type: "video", items: [] }],
+      tracks: [createVideoTrack()],
     };
   };
 
@@ -87,8 +108,6 @@ export class MainAction {
         ["path", path],
         ["name", file.name],
         ["durationFrames", durationFrames],
-        [CLIP_PROP_CENTER_X, COMPOSITION_DEFAULT_CENTER_X],
-        [CLIP_PROP_CENTER_Y, COMPOSITION_DEFAULT_CENTER_Y],
       ]),
     };
 
@@ -96,13 +115,17 @@ export class MainAction {
     if (items === null) {
       return;
     }
-    const nextTrack: VideoTrack = { type: "video", items };
+    const nextTrack: VideoTrack = {
+      type: "video",
+      items,
+      properties: clonePropertyLayer(track.properties),
+    };
     tracks[index] = nextTrack;
     this.#store.project = { ...project, tracks };
 
     const itemIndex = items.indexOf(clip);
     if (itemIndex >= 0) {
-      this.#store.selection = { trackIndex: index, itemIndex };
+      this.#store.selection = { type: "clip", trackIndex: index, itemIndex };
       const startFrame = itemStartFrame(items, itemIndex);
       this.#store.playheadFrame = timelineFramesToPlayhead(
         startFrame,
@@ -161,12 +184,20 @@ export class MainAction {
       return;
     }
     const tracks = [...project.tracks];
-    tracks[trackIndex] = { type: "video", items };
+    tracks[trackIndex] = {
+      type: "video",
+      items,
+      properties: clonePropertyLayer(track.properties),
+    };
     this.#store.project = { ...project, tracks };
 
     const nextIndex = items.indexOf(clip);
     if (nextIndex >= 0) {
-      this.#store.selection = { trackIndex, itemIndex: nextIndex };
+      this.#store.selection = {
+        type: "clip",
+        trackIndex,
+        itemIndex: nextIndex,
+      };
     }
   };
 
@@ -200,7 +231,11 @@ export class MainAction {
     });
   };
 
-  setClipCenter = (center: CompositionCenter): void => {
+  setPropertyValue = <K extends PropertyChannelId>(
+    id: K,
+    value: ChannelValueMap[K],
+    frame: number,
+  ): void => {
     if (this.#pendingClipDrag) {
       return;
     }
@@ -208,44 +243,29 @@ export class MainAction {
     if (!selection) {
       return;
     }
-    const project = this.#store.project;
-    const track = project.tracks[selection.trackIndex];
-    if (!track || track.type !== "video") {
+    if (selection.type === "track") {
+      this.#setTrackPropertyValue(selection, id, value, frame);
       return;
     }
-    const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return;
-    }
+    this.#setObjectPropertyValue(selection, id, value, frame);
+  };
 
-    const next = normalizeCompositionCenter(center);
-    if (!next) {
+  setPropertyInterpolation = (
+    id: PropertyChannelId,
+    interpolation: Interpolation,
+  ): void => {
+    if (this.#pendingClipDrag) {
       return;
     }
-    const current = clipCenter(item);
-    if (current.x === next.x && current.y === next.y) {
+    const selection = this.#store.selection;
+    if (!selection) {
       return;
     }
-
-    const before = cloneTrackItems(track.items);
-    const clipPropertiesBefore = cloneClipProperties(item);
-    item.properties.set(CLIP_PROP_CENTER_X, next.x);
-    item.properties.set(CLIP_PROP_CENTER_Y, next.y);
-    const tracks = [...project.tracks];
-    tracks[selection.trackIndex] = { type: "video", items: [...track.items] };
-    this.#store.project = { ...project, tracks };
-
-    this.#pushHistory({
-      identity: {
-        trackIndex: selection.trackIndex,
-        itemIndex: selection.itemIndex,
-        clip: item,
-      },
-      before,
-      after: cloneTrackItems(tracks[selection.trackIndex].items),
-      clipPropertiesBefore,
-      clipPropertiesAfter: cloneClipProperties(item),
-    });
+    if (selection.type === "track") {
+      this.#setTrackPropertyInterpolation(selection, id, interpolation);
+      return;
+    }
+    this.#setObjectPropertyInterpolation(selection, id, interpolation);
   };
 
   undo = (): void => {
@@ -264,6 +284,7 @@ export class MainAction {
       entry.before,
       entry,
       entry.clipPropertiesBefore,
+      entry.trackPropertiesBefore,
     );
   };
 
@@ -283,6 +304,7 @@ export class MainAction {
       entry.after,
       entry,
       entry.clipPropertiesAfter,
+      entry.trackPropertiesAfter,
     );
   };
 
@@ -325,6 +347,220 @@ export class MainAction {
     this.play();
   };
 
+  #setTrackPropertyValue = <K extends PropertyChannelId>(
+    selection: TrackSelection,
+    id: K,
+    value: ChannelValueMap[K],
+    frame: number,
+  ): void => {
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const trackPropertiesBefore = cloneTrackProperties(track);
+    const layer = clonePropertyLayer(track.properties);
+    this.#applyValueToLayer(layer, layer, id, value, frame);
+    if (propertyLayersEqual(layer, track.properties)) {
+      return;
+    }
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      type: "video",
+      items: track.items,
+      properties: layer,
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: -1,
+        clip: null,
+      },
+      before: cloneTrackItems(track.items),
+      after: cloneTrackItems(track.items),
+      trackPropertiesBefore,
+      trackPropertiesAfter: clonePropertyLayer(layer),
+    });
+  };
+
+  #setObjectPropertyValue = <K extends PropertyChannelId>(
+    selection: ClipSelection,
+    id: K,
+    value: ChannelValueMap[K],
+    frame: number,
+  ): void => {
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return;
+    }
+    const before = cloneTrackItems(track.items);
+    const clipPropertiesBefore = cloneClipProperties(item);
+    const objectLayer = clipPropertyLayer(item);
+    const nextLayer = clonePropertyLayer(objectLayer);
+    this.#applyValueToLayer(nextLayer, track.properties, id, value, frame);
+    if (propertyLayersEqual(nextLayer, objectLayer)) {
+      return;
+    }
+    setClipPropertyLayer(item, nextLayer);
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      type: "video",
+      items: [...track.items],
+      properties: clonePropertyLayer(track.properties),
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: selection.itemIndex,
+        clip: item,
+      },
+      before,
+      after: cloneTrackItems(tracks[selection.trackIndex].items),
+      clipPropertiesBefore,
+      clipPropertiesAfter: cloneClipProperties(item),
+    });
+  };
+
+  #setTrackPropertyInterpolation = (
+    selection: TrackSelection,
+    id: PropertyChannelId,
+    interpolation: Interpolation,
+  ): void => {
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const current = channelAtOrDefault(track.properties, id);
+    if (current.interpolation === interpolation) {
+      return;
+    }
+    const trackPropertiesBefore = cloneTrackProperties(track);
+    const layer = clonePropertyLayer(track.properties);
+    writeChannel(layer, id, setChannelInterpolation(current, interpolation));
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      type: "video",
+      items: track.items,
+      properties: layer,
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: -1,
+        clip: null,
+      },
+      before: cloneTrackItems(track.items),
+      after: cloneTrackItems(track.items),
+      trackPropertiesBefore,
+      trackPropertiesAfter: clonePropertyLayer(layer),
+    });
+  };
+
+  #setObjectPropertyInterpolation = (
+    selection: ClipSelection,
+    id: PropertyChannelId,
+    interpolation: Interpolation,
+  ): void => {
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return;
+    }
+    const objectLayer = clipPropertyLayer(item);
+    const base = objectLayer[id]
+      ? channelAtOrDefault(objectLayer, id)
+      : channelAtOrDefault(track.properties, id);
+    if (objectLayer[id] && base.interpolation === interpolation) {
+      return;
+    }
+    const before = cloneTrackItems(track.items);
+    const clipPropertiesBefore = cloneClipProperties(item);
+    const nextLayer = clonePropertyLayer(objectLayer);
+    writeChannel(nextLayer, id, setChannelInterpolation(base, interpolation));
+    setClipPropertyLayer(item, nextLayer);
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      type: "video",
+      items: [...track.items],
+      properties: clonePropertyLayer(track.properties),
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: selection.itemIndex,
+        clip: item,
+      },
+      before,
+      after: cloneTrackItems(tracks[selection.trackIndex].items),
+      clipPropertiesBefore,
+      clipPropertiesAfter: cloneClipProperties(item),
+    });
+  };
+
+  #applyValueToLayer = <K extends PropertyChannelId>(
+    target: PropertyLayer,
+    trackFallback: PropertyLayer,
+    id: K,
+    value: ChannelValueMap[K],
+    frame: number,
+  ): void => {
+    const widthBefore = evaluateChannel(
+      target.width ?? trackFallback.width,
+      "width",
+      frame,
+    );
+    const heightBefore = evaluateChannel(
+      target.height ?? trackFallback.height,
+      "height",
+      frame,
+    );
+    const lock = evaluateChannel(
+      target.aspectRatioLock ?? trackFallback.aspectRatioLock,
+      "aspectRatioLock",
+      frame,
+    );
+    const base = target[id]
+      ? channelAtOrDefault(target, id)
+      : channelAtOrDefault(trackFallback, id);
+    writeChannel(target, id, upsertKeyframe(base, frame, value));
+
+    if (!lock || (id !== "width" && id !== "height")) {
+      return;
+    }
+    const ratio = aspectRatio(widthBefore, heightBefore);
+    if (id === "width") {
+      const nextHeight = proportionalHeight(value as number, ratio);
+      const heightBase = target.height
+        ? channelAtOrDefault(target, "height")
+        : channelAtOrDefault(trackFallback, "height");
+      writeChannel(
+        target,
+        "height",
+        upsertKeyframe(heightBase, frame, nextHeight),
+      );
+      return;
+    }
+    const nextWidth = proportionalWidth(value as number, ratio);
+    const widthBase = target.width
+      ? channelAtOrDefault(target, "width")
+      : channelAtOrDefault(trackFallback, "width");
+    writeChannel(target, "width", upsertKeyframe(widthBase, frame, nextWidth));
+  };
+
   #pushHistory = (entry: HistoryEntry): void => {
     this.#store.undoStack = pushUndoEntry(this.#store.undoStack, entry);
     this.#store.redoStack = [];
@@ -335,6 +571,7 @@ export class MainAction {
     items: TrackItem[],
     entry: HistoryEntry,
     clipProperties?: Map<string, unknown>,
+    trackProperties?: PropertyLayer,
   ): void => {
     const project = this.#store.project;
     if (trackIndex < 0 || trackIndex >= project.tracks.length) {
@@ -344,17 +581,28 @@ export class MainAction {
     if (!track || track.type !== "video") {
       return;
     }
-    if (clipProperties) {
+    if (clipProperties && entry.identity.clip) {
       restoreClipProperties(entry.identity.clip, clipProperties);
+    }
+    if (trackProperties) {
+      restoreTrackProperties(track, trackProperties);
     }
     const nextItems = cloneTrackItems(items);
     const tracks = [...project.tracks];
-    tracks[trackIndex] = { type: "video", items: nextItems };
+    tracks[trackIndex] = {
+      type: "video",
+      items: nextItems,
+      properties: clonePropertyLayer(track.properties),
+    };
     this.#store.project = { ...project, tracks };
 
-    const itemIndex = nextItems.indexOf(entry.identity.clip);
-    if (itemIndex >= 0) {
-      this.#store.selection = { trackIndex, itemIndex };
+    if (entry.identity.clip) {
+      const itemIndex = nextItems.indexOf(entry.identity.clip);
+      if (itemIndex >= 0) {
+        this.#store.selection = { type: "clip", trackIndex, itemIndex };
+      }
+    } else {
+      this.#store.selection = { type: "track", trackIndex };
     }
 
     const max = maxPlayheadFrames(this.#store.project);
@@ -400,3 +648,9 @@ export class MainAction {
     this.#store.playheadFrame = next;
   };
 }
+
+function propertyLayersEqual(a: PropertyLayer, b: PropertyLayer): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+export type { EditorSelection };

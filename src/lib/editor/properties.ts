@@ -1,0 +1,444 @@
+import {
+  COMPOSITION_DEFAULT_CENTER_X,
+  COMPOSITION_DEFAULT_CENTER_Y,
+  COMPOSITION_HEIGHT,
+  COMPOSITION_WIDTH,
+} from "./composition";
+
+export type Anchor =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "middle-left"
+  | "middle-center"
+  | "middle-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
+export type Interpolation = "linear" | "hold";
+
+export type Keyframe<T> = {
+  frame: number;
+  value: T;
+};
+
+export type AnimatedChannel<T> = {
+  keyframes: Keyframe<T>[];
+  interpolation: Interpolation;
+};
+
+export type PropertyChannelId =
+  | "anchor"
+  | "width"
+  | "height"
+  | "aspectRatioLock"
+  | "x"
+  | "y"
+  | "opacity"
+  | "rotation";
+
+export type ChannelValueMap = {
+  anchor: Anchor;
+  width: number;
+  height: number;
+  aspectRatioLock: boolean;
+  x: number;
+  y: number;
+  opacity: number;
+  rotation: number;
+};
+
+export type PropertyLayer = {
+  [K in PropertyChannelId]?: AnimatedChannel<ChannelValueMap[K]>;
+};
+
+export type PropertySource = "track" | "object";
+
+export type ResolvedChannel<T> = {
+  value: T;
+  source: PropertySource;
+};
+
+export type ResolvedProperties = {
+  [K in PropertyChannelId]: ResolvedChannel<ChannelValueMap[K]>;
+};
+
+export const PROPERTY_CHANNEL_IDS: PropertyChannelId[] = [
+  "anchor",
+  "width",
+  "height",
+  "aspectRatioLock",
+  "x",
+  "y",
+  "opacity",
+  "rotation",
+];
+
+export const ANCHOR_OPTIONS: Anchor[] = [
+  "top-left",
+  "top-center",
+  "top-right",
+  "middle-left",
+  "middle-center",
+  "middle-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+];
+
+const DEFAULT_VALUES: ChannelValueMap = {
+  anchor: "middle-center",
+  width: COMPOSITION_WIDTH,
+  height: COMPOSITION_HEIGHT,
+  aspectRatioLock: true,
+  x: COMPOSITION_DEFAULT_CENTER_X,
+  y: COMPOSITION_DEFAULT_CENTER_Y,
+  opacity: 1,
+  rotation: 0,
+};
+
+export function defaultChannelValue<K extends PropertyChannelId>(
+  id: K,
+): ChannelValueMap[K] {
+  return DEFAULT_VALUES[id];
+}
+
+export function createStaticChannel<T>(
+  value: T,
+  interpolation: Interpolation = "linear",
+): AnimatedChannel<T> {
+  return {
+    keyframes: [{ frame: 0, value }],
+    interpolation,
+  };
+}
+
+export function createDefaultTrackProperties(): PropertyLayer {
+  return {
+    anchor: createStaticChannel(DEFAULT_VALUES.anchor, "hold"),
+    width: createStaticChannel(DEFAULT_VALUES.width),
+    height: createStaticChannel(DEFAULT_VALUES.height),
+    aspectRatioLock: createStaticChannel(
+      DEFAULT_VALUES.aspectRatioLock,
+      "hold",
+    ),
+    x: createStaticChannel(DEFAULT_VALUES.x),
+    y: createStaticChannel(DEFAULT_VALUES.y),
+    opacity: createStaticChannel(DEFAULT_VALUES.opacity),
+    rotation: createStaticChannel(DEFAULT_VALUES.rotation),
+  };
+}
+
+export function cloneChannel<T>(
+  channel: AnimatedChannel<T>,
+): AnimatedChannel<T> {
+  return {
+    interpolation: channel.interpolation,
+    keyframes: channel.keyframes.map((keyframe) => ({
+      frame: keyframe.frame,
+      value: keyframe.value,
+    })),
+  };
+}
+
+export function writeChannel<K extends PropertyChannelId>(
+  layer: PropertyLayer,
+  id: K,
+  channel: AnimatedChannel<ChannelValueMap[K]>,
+): void {
+  (layer as Record<K, AnimatedChannel<ChannelValueMap[K]>>)[id] = channel;
+}
+
+export function clonePropertyLayer(layer: PropertyLayer): PropertyLayer {
+  const next: PropertyLayer = {};
+  for (const id of PROPERTY_CHANNEL_IDS) {
+    switch (id) {
+      case "anchor":
+        if (layer.anchor) {
+          writeChannel(next, id, cloneChannel(layer.anchor));
+        }
+        break;
+      case "aspectRatioLock":
+        if (layer.aspectRatioLock) {
+          writeChannel(next, id, cloneChannel(layer.aspectRatioLock));
+        }
+        break;
+      case "width":
+      case "height":
+      case "x":
+      case "y":
+      case "opacity":
+      case "rotation":
+        if (layer[id]) {
+          writeChannel(next, id, cloneChannel(layer[id]));
+        }
+        break;
+    }
+  }
+  return next;
+}
+
+function sortKeyframes<T>(keyframes: Keyframe<T>[]): Keyframe<T>[] {
+  return [...keyframes].sort((a, b) => a.frame - b.frame);
+}
+
+export function normalizeChannel<T>(
+  channel: AnimatedChannel<T>,
+): AnimatedChannel<T> | null {
+  if (!channel.keyframes.length) {
+    return null;
+  }
+  const interpolation = channel.interpolation === "hold" ? "hold" : "linear";
+  const keyframes = sortKeyframes(channel.keyframes).filter((keyframe) =>
+    Number.isFinite(keyframe.frame),
+  );
+  if (!keyframes.length) {
+    return null;
+  }
+  const deduped: Keyframe<T>[] = [];
+  for (const keyframe of keyframes) {
+    const frame = Math.floor(keyframe.frame);
+    const last = deduped[deduped.length - 1];
+    if (last && last.frame === frame) {
+      last.value = keyframe.value;
+      continue;
+    }
+    deduped.push({ frame, value: keyframe.value });
+  }
+  return { interpolation, keyframes: deduped };
+}
+
+function lerpNumber(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function evaluateDiscrete<T>(
+  keyframes: Keyframe<T>[],
+  frame: number,
+  interpolate: ((a: T, b: T, t: number) => T) | null,
+  interpolation: Interpolation,
+): T {
+  const first = keyframes[0];
+  const last = keyframes[keyframes.length - 1];
+  if (frame <= first.frame) {
+    return first.value;
+  }
+  if (frame >= last.frame) {
+    return last.value;
+  }
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    const left = keyframes[i];
+    const right = keyframes[i + 1];
+    if (frame < left.frame || frame > right.frame) {
+      continue;
+    }
+    if (frame === right.frame) {
+      return right.value;
+    }
+    if (
+      interpolation === "hold" ||
+      !interpolate ||
+      left.frame === right.frame
+    ) {
+      return left.value;
+    }
+    const t = (frame - left.frame) / (right.frame - left.frame);
+    return interpolate(left.value, right.value, t);
+  }
+  return last.value;
+}
+
+export function evaluateChannel<K extends PropertyChannelId>(
+  channel: AnimatedChannel<ChannelValueMap[K]> | undefined,
+  id: K,
+  frame: number,
+): ChannelValueMap[K] {
+  const fallback = defaultChannelValue(id);
+  if (!channel || channel.keyframes.length === 0) {
+    return fallback;
+  }
+  const normalized = normalizeChannel(channel);
+  if (!normalized) {
+    return fallback;
+  }
+  const safeFrame = Number.isFinite(frame) ? Math.floor(frame) : 0;
+
+  if (
+    id === "width" ||
+    id === "height" ||
+    id === "x" ||
+    id === "y" ||
+    id === "opacity" ||
+    id === "rotation"
+  ) {
+    return evaluateDiscrete(
+      normalized.keyframes as Keyframe<number>[],
+      safeFrame,
+      lerpNumber,
+      normalized.interpolation,
+    ) as ChannelValueMap[K];
+  }
+
+  if (id === "aspectRatioLock") {
+    return evaluateDiscrete(
+      normalized.keyframes as Keyframe<boolean>[],
+      safeFrame,
+      null,
+      "hold",
+    ) as ChannelValueMap[K];
+  }
+
+  return evaluateDiscrete(
+    normalized.keyframes as Keyframe<Anchor>[],
+    safeFrame,
+    null,
+    "hold",
+  ) as ChannelValueMap[K];
+}
+
+function writeResolved<K extends PropertyChannelId>(
+  result: ResolvedProperties,
+  id: K,
+  value: ChannelValueMap[K],
+  source: PropertySource,
+): void {
+  (result as Record<K, ResolvedChannel<ChannelValueMap[K]>>)[id] = {
+    value,
+    source,
+  };
+}
+
+export function resolveProperties(
+  track: PropertyLayer,
+  object: PropertyLayer | undefined,
+  frame: number,
+): ResolvedProperties {
+  const result = {} as ResolvedProperties;
+  for (const id of PROPERTY_CHANNEL_IDS) {
+    const objectChannel = object?.[id];
+    if (objectChannel && objectChannel.keyframes.length > 0) {
+      writeResolved(
+        result,
+        id,
+        evaluateChannel(objectChannel, id, frame),
+        "object",
+      );
+      continue;
+    }
+    writeResolved(result, id, evaluateChannel(track[id], id, frame), "track");
+  }
+  return result;
+}
+
+export function upsertKeyframe<T>(
+  channel: AnimatedChannel<T>,
+  frame: number,
+  value: T,
+): AnimatedChannel<T> {
+  const next = cloneChannel(channel);
+  const safeFrame = Math.floor(frame);
+  const existing = next.keyframes.find(
+    (keyframe) => keyframe.frame === safeFrame,
+  );
+  if (existing) {
+    existing.value = value;
+  } else {
+    next.keyframes.push({ frame: safeFrame, value });
+  }
+  return (
+    normalizeChannel(next) ?? createStaticChannel(value, next.interpolation)
+  );
+}
+
+export function setChannelInterpolation<T>(
+  channel: AnimatedChannel<T>,
+  interpolation: Interpolation,
+): AnimatedChannel<T> {
+  const next = cloneChannel(channel);
+  next.interpolation = interpolation === "hold" ? "hold" : "linear";
+  return next;
+}
+
+export function channelAtOrDefault<K extends PropertyChannelId>(
+  layer: PropertyLayer,
+  id: K,
+): AnimatedChannel<ChannelValueMap[K]> {
+  const existing = layer[id];
+  if (existing && existing.keyframes.length > 0) {
+    return cloneChannel(existing) as AnimatedChannel<ChannelValueMap[K]>;
+  }
+  const hold = id === "anchor" || id === "aspectRatioLock" ? "hold" : "linear";
+  return createStaticChannel(defaultChannelValue(id), hold);
+}
+
+export function proportionalHeight(width: number, aspect: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(aspect) || aspect === 0) {
+    return width;
+  }
+  return width / aspect;
+}
+
+export function proportionalWidth(height: number, aspect: number): number {
+  if (!Number.isFinite(height) || !Number.isFinite(aspect) || aspect === 0) {
+    return height;
+  }
+  return height * aspect;
+}
+
+export function aspectRatio(width: number, height: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height === 0) {
+    return 1;
+  }
+  return width / height;
+}
+
+export type AnchorFractions = { x: number; y: number };
+
+export function anchorFractions(anchor: Anchor): AnchorFractions {
+  const x = anchor.endsWith("left") ? 0 : anchor.endsWith("right") ? 1 : 0.5;
+  const y = anchor.startsWith("top")
+    ? 0
+    : anchor.startsWith("bottom")
+      ? 1
+      : 0.5;
+  return { x, y };
+}
+
+export type PreviewTransform = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  opacity: number;
+  rotation: number;
+  anchor: Anchor;
+  left: number;
+  top: number;
+  originX: number;
+  originY: number;
+};
+
+export function resolvedToPreviewTransform(
+  resolved: ResolvedProperties,
+): PreviewTransform {
+  const width = Math.max(0, resolved.width.value);
+  const height = Math.max(0, resolved.height.value);
+  const anchor = resolved.anchor.value;
+  const fractions = anchorFractions(anchor);
+  const x = resolved.x.value;
+  const y = resolved.y.value;
+  return {
+    x,
+    y,
+    width,
+    height,
+    opacity: Math.min(1, Math.max(0, resolved.opacity.value)),
+    rotation: resolved.rotation.value,
+    anchor,
+    left: x - fractions.x * width,
+    top: y - fractions.y * height,
+    originX: fractions.x,
+    originY: fractions.y,
+  };
+}

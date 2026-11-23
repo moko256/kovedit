@@ -76,16 +76,16 @@ test("timeline ruler scrub and transport hotkeys", async ({
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
 
-  const centerX = page.getByRole("textbox", { name: "Center X" });
-  await expect(centerX).toBeVisible();
-  await centerX.click();
-  await centerX.fill("12");
+  const positionX = page.getByRole("textbox", { name: "Position X" });
+  await expect(positionX).toBeVisible();
+  await positionX.click();
+  await positionX.fill("12");
   await page.keyboard.press("ArrowLeft");
-  await expect(centerX).toHaveValue("12");
+  await expect(positionX).toHaveValue("12");
   await expect(frame).toHaveText("80f");
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
-  await expect(centerX).toHaveValue("1 2");
+  await expect(positionX).toHaveValue("1 2");
   await expect(frame).toHaveText("80f");
 
   await captureScreenshot("timeline-scrub-hotkeys");
