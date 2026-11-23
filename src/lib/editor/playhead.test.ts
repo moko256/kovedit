@@ -28,7 +28,6 @@ function projectWithClips(): { project: Project; first: ClipNode } {
       info: { fps: 30 },
       tracks: [
         {
-          type: "video",
           items: [first, { space: 10 }, second],
           properties: createDefaultTrackProperties(),
         },

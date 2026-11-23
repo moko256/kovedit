@@ -4,7 +4,13 @@ import {
   timelineFramesToPlayhead,
 } from "./fps";
 import { layoutTrack, totalTrackFrames } from "./track-layout";
-import { clipPath, isClipNode, type Project } from "./types";
+import {
+  clipObjectType,
+  clipPath,
+  clipPlaybackRate,
+  isClipNode,
+  type Project,
+} from "./types";
 
 export type ActiveClip = {
   trackIndex: number;
@@ -50,15 +56,19 @@ export function activeClipAtPlayhead(
       if (!item || !isClipNode(item)) {
         continue;
       }
+      if (clipObjectType(item) !== "video") {
+        continue;
+      }
       const path = clipPath(item);
       if (!path) {
         continue;
       }
+      const localFrames = timelineFrame - entry.startFrame;
       return {
         trackIndex,
         itemIndex: entry.itemIndex,
         path,
-        mediaTimeSeconds: (timelineFrame - entry.startFrame) / timelineFps,
+        mediaTimeSeconds: (localFrames * clipPlaybackRate(item)) / timelineFps,
         clipStartPlayhead: timelineFramesToPlayhead(
           entry.startFrame,
           timelineFps,

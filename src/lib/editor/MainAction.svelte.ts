@@ -29,20 +29,28 @@ import {
   moveClipToFrame,
 } from "./track-layout";
 import {
+  clipDurationFrames,
+  clipIsDrawable,
+  clipPlaybackRate,
   clipPropertyLayer,
+  clipTextContent,
   cloneClipProperties,
   cloneTrackProperties,
-  createVideoTrack,
+  createMediaClip,
+  createTextClip,
+  createTrack,
   isClipNode,
   restoreClipProperties,
   restoreTrackProperties,
+  setClipPlaybackRate,
   setClipPropertyLayer,
+  setClipTextContent,
   type ClipNode,
   type ClipSelection,
   type EditorSelection,
+  type Track,
   type TrackItem,
   type TrackSelection,
-  type VideoTrack,
 } from "./types";
 
 type PendingClipDrag = {
@@ -74,14 +82,18 @@ export class MainAction {
     this.#store.selection = { type: "track", trackIndex };
   };
 
-  ensureVideoTrack = (): void => {
+  ensureTrack = (): void => {
     if (this.#store.project.tracks.length > 0) {
       return;
     }
     this.#store.project = {
       ...this.#store.project,
-      tracks: [createVideoTrack()],
+      tracks: [createTrack()],
     };
+  };
+
+  ensureVideoTrack = (): void => {
+    this.ensureTrack();
   };
 
   dropVideoFile = async (
@@ -89,7 +101,24 @@ export class MainAction {
     trackIndex: number,
     frame: number,
   ): Promise<void> => {
-    this.ensureVideoTrack();
+    await this.dropMediaFile(file, "video", trackIndex, frame);
+  };
+
+  dropAudioFile = async (
+    file: File,
+    trackIndex: number,
+    frame: number,
+  ): Promise<void> => {
+    await this.dropMediaFile(file, "audio", trackIndex, frame);
+  };
+
+  dropMediaFile = async (
+    file: File,
+    objectType: "video" | "audio",
+    trackIndex: number,
+    frame: number,
+  ): Promise<void> => {
+    this.ensureTrack();
     const project = this.#store.project;
     const tracks = [...project.tracks];
     let index = trackIndex;
@@ -97,41 +126,39 @@ export class MainAction {
       index = 0;
     }
     const track = tracks[index];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
 
-    const durationFrames = await durationFramesForFile(file, project.info);
+    const sourceDurationFrames = await durationFramesForFile(
+      file,
+      project.info,
+    );
     const path = URL.createObjectURL(file);
-    const clip: ClipNode = {
-      properties: new Map<string, unknown>([
-        ["path", path],
-        ["name", file.name],
-        ["durationFrames", durationFrames],
-      ]),
-    };
+    const clip = createMediaClip({
+      objectType,
+      path,
+      name: file.name,
+      sourceDurationFrames,
+    });
 
-    const items = insertClipAtFrame(track.items, clip, frame);
-    if (items === null) {
+    this.#commitInsertedClip(tracks, index, track, clip, frame);
+  };
+
+  insertTextObject = (trackIndex: number, frame: number): void => {
+    this.ensureTrack();
+    const project = this.#store.project;
+    const tracks = [...project.tracks];
+    let index = trackIndex;
+    if (index < 0 || index >= tracks.length) {
+      index = 0;
+    }
+    const track = tracks[index];
+    if (!track) {
       return;
     }
-    const nextTrack: VideoTrack = {
-      type: "video",
-      items,
-      properties: clonePropertyLayer(track.properties),
-    };
-    tracks[index] = nextTrack;
-    this.#store.project = { ...project, tracks };
-
-    const itemIndex = items.indexOf(clip);
-    if (itemIndex >= 0) {
-      this.#store.selection = { type: "clip", trackIndex: index, itemIndex };
-      const startFrame = itemStartFrame(items, itemIndex);
-      this.#store.playheadFrame = timelineFramesToPlayhead(
-        startFrame,
-        projectFps(project.info),
-      );
-    }
+    const clip = createTextClip();
+    this.#commitInsertedClip(tracks, index, track, clip, frame);
   };
 
   beginClipDrag = (trackIndex: number, itemIndex: number): void => {
@@ -140,7 +167,7 @@ export class MainAction {
       return;
     }
     const track = project.tracks[trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     if (itemIndex < 0 || itemIndex >= track.items.length) {
@@ -167,7 +194,7 @@ export class MainAction {
       return;
     }
     const track = project.tracks[trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     if (itemIndex < 0 || itemIndex >= track.items.length) {
@@ -185,7 +212,6 @@ export class MainAction {
     }
     const tracks = [...project.tracks];
     tracks[trackIndex] = {
-      type: "video",
       items,
       properties: clonePropertyLayer(track.properties),
     };
@@ -209,7 +235,7 @@ export class MainAction {
     }
     const project = this.#store.project;
     const track = project.tracks[pending.trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     const after = cloneTrackItems(track.items);
@@ -228,6 +254,100 @@ export class MainAction {
       },
       before: pending.before,
       after,
+    });
+  };
+
+  setPlaybackRate = (rate: number): void => {
+    if (this.#pendingClipDrag) {
+      return;
+    }
+    const selection = this.#store.selection;
+    if (!selection || selection.type !== "clip") {
+      return;
+    }
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track) {
+      return;
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return;
+    }
+    const beforeRate = clipPlaybackRate(item);
+    const beforeDuration = clipDurationFrames(item);
+    const before = cloneTrackItems(track.items);
+    const clipPropertiesBefore = cloneClipProperties(item);
+    setClipPlaybackRate(item, rate);
+    if (
+      clipPlaybackRate(item) === beforeRate &&
+      clipDurationFrames(item) === beforeDuration
+    ) {
+      return;
+    }
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      items: [...track.items],
+      properties: clonePropertyLayer(track.properties),
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: selection.itemIndex,
+        clip: item,
+      },
+      before,
+      after: cloneTrackItems(tracks[selection.trackIndex].items),
+      clipPropertiesBefore,
+      clipPropertiesAfter: cloneClipProperties(item),
+    });
+    const max = maxPlayheadFrames(this.#store.project);
+    if (this.#store.playheadFrame > max) {
+      this.#store.playheadFrame = max;
+    }
+  };
+
+  setTextContent = (text: string): void => {
+    if (this.#pendingClipDrag) {
+      return;
+    }
+    const selection = this.#store.selection;
+    if (!selection || selection.type !== "clip") {
+      return;
+    }
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track) {
+      return;
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return;
+    }
+    const beforeText = clipTextContent(item);
+    const before = cloneTrackItems(track.items);
+    const clipPropertiesBefore = cloneClipProperties(item);
+    setClipTextContent(item, text);
+    if (clipTextContent(item) === beforeText) {
+      return;
+    }
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = {
+      items: [...track.items],
+      properties: clonePropertyLayer(track.properties),
+    };
+    this.#store.project = { ...project, tracks };
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: selection.itemIndex,
+        clip: item,
+      },
+      before,
+      after: cloneTrackItems(tracks[selection.trackIndex].items),
+      clipPropertiesBefore,
+      clipPropertiesAfter: cloneClipProperties(item),
     });
   };
 
@@ -349,6 +469,35 @@ export class MainAction {
     this.play();
   };
 
+  #commitInsertedClip = (
+    tracks: Track[],
+    index: number,
+    track: Track,
+    clip: ClipNode,
+    frame: number,
+  ): void => {
+    const items = insertClipAtFrame(track.items, clip, frame);
+    if (items === null) {
+      return;
+    }
+    const project = this.#store.project;
+    tracks[index] = {
+      items,
+      properties: clonePropertyLayer(track.properties),
+    };
+    this.#store.project = { ...project, tracks };
+
+    const itemIndex = items.indexOf(clip);
+    if (itemIndex >= 0) {
+      this.#store.selection = { type: "clip", trackIndex: index, itemIndex };
+      const startFrame = itemStartFrame(items, itemIndex);
+      this.#store.playheadFrame = timelineFramesToPlayhead(
+        startFrame,
+        projectFps(project.info),
+      );
+    }
+  };
+
   #setTrackPropertyValue = <K extends PropertyChannelId>(
     selection: TrackSelection,
     id: K,
@@ -357,7 +506,7 @@ export class MainAction {
   ): void => {
     const project = this.#store.project;
     const track = project.tracks[selection.trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     const trackPropertiesBefore = cloneTrackProperties(track);
@@ -368,7 +517,6 @@ export class MainAction {
     }
     const tracks = [...project.tracks];
     tracks[selection.trackIndex] = {
-      type: "video",
       items: track.items,
       properties: layer,
     };
@@ -394,11 +542,11 @@ export class MainAction {
   ): void => {
     const project = this.#store.project;
     const track = project.tracks[selection.trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
+    if (!item || !isClipNode(item) || !clipIsDrawable(item)) {
       return;
     }
     const before = cloneTrackItems(track.items);
@@ -412,7 +560,6 @@ export class MainAction {
     setClipPropertyLayer(item, nextLayer);
     const tracks = [...project.tracks];
     tracks[selection.trackIndex] = {
-      type: "video",
       items: [...track.items],
       properties: clonePropertyLayer(track.properties),
     };
@@ -437,7 +584,7 @@ export class MainAction {
   ): void => {
     const project = this.#store.project;
     const track = project.tracks[selection.trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     const current = channelAtOrDefault(track.properties, id);
@@ -449,7 +596,6 @@ export class MainAction {
     writeChannel(layer, id, setChannelInterpolation(current, interpolation));
     const tracks = [...project.tracks];
     tracks[selection.trackIndex] = {
-      type: "video",
       items: track.items,
       properties: layer,
     };
@@ -474,11 +620,11 @@ export class MainAction {
   ): void => {
     const project = this.#store.project;
     const track = project.tracks[selection.trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
+    if (!item || !isClipNode(item) || !clipIsDrawable(item)) {
       return;
     }
     const objectLayer = clipPropertyLayer(item);
@@ -495,7 +641,6 @@ export class MainAction {
     setClipPropertyLayer(item, nextLayer);
     const tracks = [...project.tracks];
     tracks[selection.trackIndex] = {
-      type: "video",
       items: [...track.items],
       properties: clonePropertyLayer(track.properties),
     };
@@ -580,7 +725,7 @@ export class MainAction {
       return;
     }
     const track = project.tracks[trackIndex];
-    if (!track || track.type !== "video") {
+    if (!track) {
       return;
     }
     if (clipProperties && entry.identity.clip) {
@@ -592,7 +737,6 @@ export class MainAction {
     const nextItems = cloneTrackItems(items);
     const tracks = [...project.tracks];
     tracks[trackIndex] = {
-      type: "video",
       items: nextItems,
       properties: clonePropertyLayer(track.properties),
     };

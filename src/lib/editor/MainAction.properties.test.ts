@@ -22,7 +22,6 @@ function projectWithClip(): {
     info: {},
     tracks: [
       {
-        type: "video",
         items: [clip],
         properties: createDefaultTrackProperties(),
       },
