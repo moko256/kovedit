@@ -7,7 +7,25 @@
 
   const store = new MainStore();
   const action = new MainAction(store);
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (!event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (key !== "z") {
+      return;
+    }
+    event.preventDefault();
+    if (event.shiftKey) {
+      action.redo();
+      return;
+    }
+    action.undo();
+  }
 </script>
+
+<svelte:window onkeydown={onKeyDown} />
 
 <div class="editor-shell">
   <div class="editor-shell__top">
