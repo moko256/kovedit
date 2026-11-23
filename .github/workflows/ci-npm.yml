@@ -60,3 +60,6 @@ jobs:
       # JS half of `pnpm lint` (svelte-check + eslint). Dylint runs in ci-rust.yml.
       - name: Lint
         run: pnpm check && pnpm exec eslint .
+
+      - name: Unit tests
+        run: pnpm test:unit

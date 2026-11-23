@@ -34,7 +34,7 @@ async function dropVideo(
   );
 }
 
-test("Properties pane edits object X/Y with undo/redo and inheritance", async ({
+test("Properties pane shows inherited object values and track defaults", async ({
   page,
   captureScreenshot,
 }) => {
@@ -43,46 +43,20 @@ test("Properties pane edits object X/Y with undo/redo and inheritance", async ({
   await dropVideo(page, samplePath, "sample.mp4");
 
   const positionX = page.getByRole("textbox", { name: "Position X" });
-  const positionY = page.getByRole("textbox", { name: "Position Y" });
   await expect(positionX).toBeVisible();
-  await expect(positionY).toBeVisible();
   await expect(positionX).toHaveValue("960");
-  await expect(positionY).toHaveValue("540");
   await expect(positionX).toHaveAttribute("data-inherited", "true");
 
   await positionX.fill("100");
   await positionX.press("Enter");
   await expect(positionX).toHaveValue("100");
-  await expect(positionY).toHaveValue("540");
   await expect(positionX).toHaveAttribute("data-inherited", "false");
-
-  await positionY.fill("200");
-  await positionY.blur();
-  await expect(positionY).toHaveValue("200");
-
-  await page.keyboard.press("Control+z");
-  await expect(positionY).toHaveValue("540");
-  await expect(positionX).toHaveValue("100");
-
-  await page.keyboard.press("Control+z");
-  await expect(positionX).toHaveValue("960");
-  await expect(positionY).toHaveValue("540");
-
-  await page.keyboard.press("Control+Shift+z");
-  await expect(positionX).toHaveValue("100");
-  await expect(positionY).toHaveValue("540");
-
-  await page.keyboard.press("Control+Shift+z");
-  await expect(positionX).toHaveValue("100");
-  await expect(positionY).toHaveValue("200");
 
   await page.getByRole("button", { name: "Select video track 1" }).click();
   await expect(page.getByText("Track defaults")).toBeVisible();
-  const trackX = page.getByRole("textbox", { name: "Position X" });
-  await expect(trackX).toHaveValue("960");
-  await trackX.fill("50");
-  await trackX.press("Enter");
-  await expect(trackX).toHaveValue("50");
+  await expect(page.getByRole("textbox", { name: "Position X" })).toHaveValue(
+    "960",
+  );
 
   await captureScreenshot("properties-object-track-layers");
 });

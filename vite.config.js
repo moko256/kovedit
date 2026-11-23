@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import process from "node:process";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -17,6 +17,12 @@ export default defineConfig(() => ({
       }),
     }),
   ],
+
+  resolve: process.env.VITEST
+    ? {
+        conditions: ["browser"],
+      }
+    : undefined,
 
   clearScreen: false,
   server: {
@@ -33,5 +39,10 @@ export default defineConfig(() => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+  },
+
+  test: {
+    include: ["src/**/*.{test,spec}.{js,ts}"],
+    environment: "node",
   },
 }));
