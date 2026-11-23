@@ -1,3 +1,4 @@
+import type { HistoryEntry } from "./history";
 import { createEmptyProject, type ClipSelection, type Project } from "./types";
 
 export class MainStore {
@@ -5,4 +6,6 @@ export class MainStore {
   selection = $state<ClipSelection | null>(null);
   playheadFrame = $state(0);
   playing = $state(false);
+  undoStack = $state<HistoryEntry[]>([]);
+  redoStack = $state<HistoryEntry[]>([]);
 }

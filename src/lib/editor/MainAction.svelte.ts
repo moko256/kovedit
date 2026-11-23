@@ -1,4 +1,10 @@
 import { PLAYHEAD_FPS, projectFps, timelineFramesToPlayhead } from "./fps";
+import {
+  cloneTrackItems,
+  pushUndoEntry,
+  trackItemsEqual,
+  type HistoryEntry,
+} from "./history";
 import { durationFramesForFile } from "./media";
 import type { MainStore } from "./MainStore.svelte";
 import { maxPlayheadFrames } from "./playhead";
@@ -7,13 +13,26 @@ import {
   itemStartFrame,
   moveClipToFrame,
 } from "./track-layout";
-import type { ClipNode, ClipSelection, VideoTrack } from "./types";
+import {
+  isClipNode,
+  type ClipNode,
+  type ClipSelection,
+  type TrackItem,
+  type VideoTrack,
+} from "./types";
+
+type PendingClipDrag = {
+  trackIndex: number;
+  clip: ClipNode;
+  before: TrackItem[];
+};
 
 export class MainAction {
   #store: MainStore;
   #timer: ReturnType<typeof setInterval> | null = null;
   #playOriginMs = 0;
   #playOriginFrame = 0;
+  #pendingClipDrag: PendingClipDrag | null = null;
 
   constructor(store: MainStore) {
     this.#store = store;
@@ -79,6 +98,29 @@ export class MainAction {
     }
   };
 
+  beginClipDrag = (trackIndex: number, itemIndex: number): void => {
+    const project = this.#store.project;
+    if (trackIndex < 0 || trackIndex >= project.tracks.length) {
+      return;
+    }
+    const track = project.tracks[trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    if (itemIndex < 0 || itemIndex >= track.items.length) {
+      return;
+    }
+    const clip = track.items[itemIndex];
+    if (!isClipNode(clip)) {
+      return;
+    }
+    this.#pendingClipDrag = {
+      trackIndex,
+      clip,
+      before: cloneTrackItems(track.items),
+    };
+  };
+
   moveClip = (
     trackIndex: number,
     itemIndex: number,
@@ -115,6 +157,64 @@ export class MainAction {
     }
   };
 
+  endClipDrag = (): void => {
+    const pending = this.#pendingClipDrag;
+    this.#pendingClipDrag = null;
+    if (!pending) {
+      return;
+    }
+    const project = this.#store.project;
+    const track = project.tracks[pending.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const after = cloneTrackItems(track.items);
+    if (trackItemsEqual(pending.before, after)) {
+      return;
+    }
+    const itemIndex = after.indexOf(pending.clip);
+    if (itemIndex < 0) {
+      return;
+    }
+    this.#pushHistory({
+      identity: {
+        trackIndex: pending.trackIndex,
+        itemIndex,
+        clip: pending.clip,
+      },
+      before: pending.before,
+      after,
+    });
+  };
+
+  undo = (): void => {
+    if (this.#pendingClipDrag) {
+      return;
+    }
+    const stack = this.#store.undoStack;
+    if (stack.length === 0) {
+      return;
+    }
+    const entry = stack[stack.length - 1];
+    this.#store.undoStack = stack.slice(0, -1);
+    this.#store.redoStack = [...this.#store.redoStack, entry];
+    this.#applyHistoryItems(entry.identity.trackIndex, entry.before, entry);
+  };
+
+  redo = (): void => {
+    if (this.#pendingClipDrag) {
+      return;
+    }
+    const stack = this.#store.redoStack;
+    if (stack.length === 0) {
+      return;
+    }
+    const entry = stack[stack.length - 1];
+    this.#store.redoStack = stack.slice(0, -1);
+    this.#store.undoStack = pushUndoEntry(this.#store.undoStack, entry);
+    this.#applyHistoryItems(entry.identity.trackIndex, entry.after, entry);
+  };
+
   seek = (playheadFrame: number): void => {
     const max = maxPlayheadFrames(this.#store.project);
     const next = Math.max(0, Math.floor(playheadFrame));
@@ -144,6 +244,40 @@ export class MainAction {
       return;
     }
     this.play();
+  };
+
+  #pushHistory = (entry: HistoryEntry): void => {
+    this.#store.undoStack = pushUndoEntry(this.#store.undoStack, entry);
+    this.#store.redoStack = [];
+  };
+
+  #applyHistoryItems = (
+    trackIndex: number,
+    items: TrackItem[],
+    entry: HistoryEntry,
+  ): void => {
+    const project = this.#store.project;
+    if (trackIndex < 0 || trackIndex >= project.tracks.length) {
+      return;
+    }
+    const track = project.tracks[trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const nextItems = cloneTrackItems(items);
+    const tracks = [...project.tracks];
+    tracks[trackIndex] = { type: "video", items: nextItems };
+    this.#store.project = { ...project, tracks };
+
+    const itemIndex = nextItems.indexOf(entry.identity.clip);
+    if (itemIndex >= 0) {
+      this.#store.selection = { trackIndex, itemIndex };
+    }
+
+    const max = maxPlayheadFrames(this.#store.project);
+    if (this.#store.playheadFrame > max) {
+      this.#store.playheadFrame = max;
+    }
   };
 
   #startTimer = (): void => {

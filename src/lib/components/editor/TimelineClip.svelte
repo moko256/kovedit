@@ -39,6 +39,7 @@
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
     action.selectClip({ trackIndex, itemIndex });
+    action.beginClipDrag(trackIndex, itemIndex);
     drag = {
       originStart: startFrame,
       pointerId: event.pointerId,
@@ -69,6 +70,7 @@
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
+    action.endClipDrag();
     drag = null;
   }
 </script>
