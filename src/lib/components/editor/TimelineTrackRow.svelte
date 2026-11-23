@@ -2,11 +2,7 @@
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import { layoutTrack } from "#lib/editor/track-layout.js";
-  import {
-    isClipNode,
-    isSpaceNode,
-    type VideoTrack,
-  } from "#lib/editor/types.js";
+  import { isClipNode, isSpaceNode, type Track } from "#lib/editor/types.js";
   import TimelineClip from "./TimelineClip.svelte";
   import TimelineSpace from "./TimelineSpace.svelte";
 
@@ -18,7 +14,7 @@
     store,
     action,
   }: {
-    track: VideoTrack;
+    track: Track;
     trackIndex: number;
     maxFrames: number;
     pixelsPerFrame: number;
@@ -30,9 +26,24 @@
   let empty = $derived(track.items.length === 0);
   let selection = $derived(store.selection);
 
+  let menu: {
+    open: boolean;
+    x: number;
+    y: number;
+    frame: number;
+  } = $state({ open: false, x: 0, y: 0, frame: 0 });
+
+  let videoInput: HTMLInputElement | undefined = $state();
+  let audioInput: HTMLInputElement | undefined = $state();
+  let pendingPickFrame = $state(0);
+
   function frameFromClientX(el: HTMLElement, clientX: number): number {
     const rect = el.getBoundingClientRect();
     return Math.max(0, Math.floor((clientX - rect.left) / pixelsPerFrame));
+  }
+
+  function closeMenu(): void {
+    menu = { ...menu, open: false };
   }
 
   function onDragOver(event: DragEvent): void {
@@ -44,6 +55,7 @@
 
   async function onDrop(event: DragEvent): Promise<void> {
     event.preventDefault();
+    closeMenu();
     const files = event.dataTransfer?.files;
     if (!files || files.length === 0) {
       return;
@@ -51,11 +63,64 @@
     const el = event.currentTarget as HTMLElement;
     const frame = frameFromClientX(el, event.clientX);
     for (const file of files) {
-      if (!file.type.startsWith("video/")) {
+      if (file.type.startsWith("video/")) {
+        await action.dropVideoFile(file, trackIndex, frame);
         continue;
       }
-      await action.dropVideoFile(file, trackIndex, frame);
+      if (file.type.startsWith("audio/")) {
+        await action.dropAudioFile(file, trackIndex, frame);
+      }
     }
+  }
+
+  function onContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    const el = event.currentTarget as HTMLElement;
+    const frame = frameFromClientX(el, event.clientX);
+    menu = {
+      open: true,
+      x: event.clientX,
+      y: event.clientY,
+      frame,
+    };
+  }
+
+  function pickVideo(): void {
+    pendingPickFrame = menu.frame;
+    closeMenu();
+    videoInput?.click();
+  }
+
+  function pickAudio(): void {
+    pendingPickFrame = menu.frame;
+    closeMenu();
+    audioInput?.click();
+  }
+
+  function insertText(): void {
+    const frame = menu.frame;
+    closeMenu();
+    action.insertTextObject(trackIndex, frame);
+  }
+
+  async function onVideoPicked(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    await action.dropVideoFile(file, trackIndex, pendingPickFrame);
+  }
+
+  async function onAudioPicked(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    await action.dropAudioFile(file, trackIndex, pendingPickFrame);
   }
 
   function isClipSelected(itemIndex: number): boolean {
@@ -78,6 +143,19 @@
   }
 </script>
 
+<svelte:window
+  onclick={() => {
+    if (menu.open) {
+      closeMenu();
+    }
+  }}
+  onkeydown={(event) => {
+    if (event.key === "Escape" && menu.open) {
+      closeMenu();
+    }
+  }}
+/>
+
 <div class="track-row">
   <button
     type="button"
@@ -85,23 +163,26 @@
       "track-row__label",
       { "track-row__label--selected": trackSelected },
     ]}
-    aria-label="Select video track {trackIndex + 1}"
+    aria-label="Select track {trackIndex + 1}"
     aria-pressed={trackSelected}
     onclick={onSelectTrack}
   >
-    V{trackIndex + 1}
+    T{trackIndex + 1}
   </button>
   <div class="track-row__body">
     <div
       class="track-row__content"
       role="region"
-      aria-label="Video track {trackIndex + 1}"
+      aria-label="Track {trackIndex + 1}"
       style:width="{maxFrames * pixelsPerFrame}px"
       ondragover={onDragOver}
       ondrop={onDrop}
+      oncontextmenu={onContextMenu}
     >
       {#if empty}
-        <p class="track-row__drop-hint">Drop video files here</p>
+        <p class="track-row__drop-hint">
+          Drop video/audio or right-click to insert
+        </p>
       {/if}
       {#each layout as entry (entry.itemIndex)}
         {@const item = track.items[entry.itemIndex]}
@@ -124,6 +205,46 @@
     </div>
   </div>
 </div>
+
+<input
+  bind:this={videoInput}
+  class="track-row__file"
+  type="file"
+  accept="video/*"
+  aria-hidden="true"
+  tabindex="-1"
+  onchange={onVideoPicked}
+/>
+<input
+  bind:this={audioInput}
+  class="track-row__file"
+  type="file"
+  accept="audio/*"
+  aria-hidden="true"
+  tabindex="-1"
+  onchange={onAudioPicked}
+/>
+
+{#if menu.open}
+  <div
+    class="track-row__menu"
+    style:left="{menu.x}px"
+    style:top="{menu.y}px"
+    role="menu"
+    tabindex="-1"
+    onpointerdown={(event) => event.stopPropagation()}
+  >
+    <button type="button" role="menuitem" onclick={pickVideo}>
+      Insert video…
+    </button>
+    <button type="button" role="menuitem" onclick={pickAudio}>
+      Insert audio…
+    </button>
+    <button type="button" role="menuitem" onclick={insertText}>
+      Insert text
+    </button>
+  </div>
+{/if}
 
 <style>
   .track-row {
@@ -174,5 +295,43 @@
     color: #8a93a0;
     font-size: 0.8rem;
     pointer-events: none;
+  }
+
+  .track-row__file {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .track-row__menu {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    min-width: 10rem;
+    padding: 0.25rem;
+    border: 1px solid #c5cbd3;
+    border-radius: 4px;
+    background: #f7f8fa;
+    box-shadow: 0 8px 20px rgb(15 26 34 / 18%);
+  }
+
+  .track-row__menu button {
+    margin: 0;
+    padding: 0.4rem 0.55rem;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: #1f2933;
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .track-row__menu button:hover {
+    background: #e2e8f0;
   }
 </style>

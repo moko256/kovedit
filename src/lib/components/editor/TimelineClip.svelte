@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import { clipName, type ClipNode } from "#lib/editor/types.js";
+  import {
+    clipName,
+    clipObjectType,
+    type ClipNode,
+  } from "#lib/editor/types.js";
 
   let {
     clip,
@@ -77,7 +81,11 @@
 
 <button
   type="button"
-  class={["clip", { "clip--selected": selected }]}
+  class={[
+    "clip",
+    `clip--${clipObjectType(clip)}`,
+    { "clip--selected": selected },
+  ]}
   style:width="{Math.max(lengthFrames, 1) * pixelsPerFrame}px"
   onclick={() => action.selectClip({ trackIndex, itemIndex })}
   onpointerdown={onPointerDown}
@@ -105,6 +113,16 @@
     overflow: hidden;
     cursor: grab;
     touch-action: none;
+  }
+
+  .clip--audio {
+    border-color: #3f7a5a;
+    background: linear-gradient(180deg, #6fbf95 0%, #4f9a72 100%);
+  }
+
+  .clip--text {
+    border-color: #8a6b3d;
+    background: linear-gradient(180deg, #d6b778 0%, #b8944f 100%);
   }
 
   .clip:active {

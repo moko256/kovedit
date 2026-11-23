@@ -52,7 +52,7 @@ test("Properties pane shows inherited object values and track defaults", async (
   await expect(positionX).toHaveValue("100");
   await expect(positionX).toHaveAttribute("data-inherited", "false");
 
-  await page.getByRole("button", { name: "Select video track 1" }).click();
+  await page.getByRole("button", { name: "Select track 1" }).click();
   await expect(page.getByText("Track defaults")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Position X" })).toHaveValue(
     "960",

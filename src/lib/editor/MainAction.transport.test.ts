@@ -23,7 +23,6 @@ function projectWithClip(durationFrames = 30): {
     info: { fps: 30 },
     tracks: [
       {
-        type: "video",
         items: [clip],
         properties: createDefaultTrackProperties(),
       },
