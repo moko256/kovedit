@@ -5,13 +5,21 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { PLAYHEAD_FPS } from "#lib/editor/fps.js";
   import { maxPlayheadFrames } from "#lib/editor/playhead.js";
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();
 
   let maxFrame = $derived(maxPlayheadFrames(store.project));
   let playing = $derived(store.playing);
-  let playheadFrame = $derived(store.playheadFrame);
+  let seekFrame = $derived.by(() => {
+    const frame = store.playheadFrame;
+    if (!playing) {
+      return frame;
+    }
+    return Math.floor(frame / PLAYHEAD_FPS) * PLAYHEAD_FPS;
+  });
+  let seekStep = $derived(playing ? PLAYHEAD_FPS : 1);
   let transportLabel = $derived(playing ? "Stop" : "Play");
 </script>
 
@@ -41,12 +49,16 @@
     class="transport__seek"
     min={0}
     max={Math.max(0, maxFrame)}
-    step={1}
-    value={playheadFrame}
+    step={seekStep}
+    value={seekFrame}
     onValueChange={(value) => action.seek(value)}
     aria-label="Seek"
   />
-  <span class="transport__frame" aria-live="polite">{playheadFrame}f</span>
+  {#if playing}
+    <span class="transport__frame" aria-hidden="true"></span>
+  {:else}
+    <span class="transport__frame" aria-live="polite">{store.playheadFrame}f</span>
+  {/if}
 </div>
 
 <style>

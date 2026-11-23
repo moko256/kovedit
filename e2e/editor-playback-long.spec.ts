@@ -76,28 +76,21 @@ test("long 60fps clip keeps playing past mid-clip freeze zone", async ({
 
   await page.getByRole("button", { name: "Play" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(page.locator(".transport__frame")).toHaveText("");
 
   await expect
     .poll(
-      async () =>
-        Number.parseInt(
-          await page.locator(".transport__frame").innerText(),
-          10,
-        ),
+      async () => video.evaluate((el: HTMLVideoElement) => el.currentTime),
       { timeout: 15_000 },
     )
-    .toBeGreaterThan(280);
+    .toBeGreaterThan(4.5);
 
   const mid = await page.evaluate(() => {
     const el = document.querySelector(
       ".preview-pane__video",
     ) as HTMLVideoElement;
-    const frame = Number.parseInt(
-      document.querySelector(".transport__frame")?.textContent ?? "0",
-      10,
-    );
     return {
-      frame,
+      frameText: document.querySelector(".transport__frame")?.textContent ?? "",
       playing: !!document.querySelector('[aria-label="Stop"]'),
       paused: el.paused,
       currentTime: el.currentTime,
@@ -108,20 +101,17 @@ test("long 60fps clip keeps playing past mid-clip freeze zone", async ({
 
   expect(mid.playing).toBe(true);
   expect(mid.paused).toBe(false);
+  expect(mid.frameText).toBe("");
   expect(mid.readyState).toBeGreaterThanOrEqual(2);
   expect(mid.currentTime).toBeGreaterThan(4);
   expect(mid.seekCount).toBeLessThanOrEqual(2);
 
   await expect
     .poll(
-      async () =>
-        Number.parseInt(
-          await page.locator(".transport__frame").innerText(),
-          10,
-        ),
+      async () => video.evaluate((el: HTMLVideoElement) => el.currentTime),
       { timeout: 15_000 },
     )
-    .toBeGreaterThan(450);
+    .toBeGreaterThan(7.5);
 
   const late = await page.evaluate(() => {
     const el = document.querySelector(
