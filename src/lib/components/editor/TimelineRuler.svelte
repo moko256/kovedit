@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { timelineFrameFromPointer } from "#lib/editor/timeline-scrub.js";
+
   let {
     maxFrames,
     pixelsPerFrame,
@@ -21,12 +23,16 @@
   );
 
   function timelineFrameFromClientX(clientX: number): number {
-    if (!rulerEl || pixelsPerFrame <= 0) {
+    if (!rulerEl) {
       return 0;
     }
     const rect = rulerEl.getBoundingClientRect();
-    const frame = Math.floor((clientX - rect.left) / pixelsPerFrame);
-    return Math.min(maxFrames, Math.max(0, frame));
+    return timelineFrameFromPointer(
+      clientX,
+      rect.left,
+      pixelsPerFrame,
+      maxFrames,
+    );
   }
 
   function onPointerDown(event: PointerEvent): void {

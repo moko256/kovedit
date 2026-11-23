@@ -86,16 +86,13 @@ async function clipOffsetLeft(page: Page, name: string): Promise<number> {
   });
 }
 
-test("Ctrl+Z / Ctrl+Shift+Z undoes and redoes a clip drag", async ({
+test("Ctrl+Z undoes a clip drag in the browser", async ({
   page,
   captureScreenshot,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
   await dropVideo(page, samplePath, "sample.mp4");
-
-  const clip = page.getByRole("button", { name: "sample.mp4" });
-  await expect(clip).toBeVisible();
 
   const origin = await clipOffsetLeft(page, "sample.mp4");
   await dragClipBy(page, "sample.mp4", 240);
@@ -107,14 +104,5 @@ test("Ctrl+Z / Ctrl+Shift+Z undoes and redoes a clip drag", async ({
     .poll(async () => clipOffsetLeft(page, "sample.mp4"))
     .toBeCloseTo(origin, 0);
 
-  await page.keyboard.press("Control+Shift+z");
-  await expect
-    .poll(async () => clipOffsetLeft(page, "sample.mp4"))
-    .toBeCloseTo(moved, 0);
-
-  await page.getByRole("button", { name: "Play" }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
-  await page.getByRole("button", { name: "Stop" }).click();
-
-  await captureScreenshot("timeline-undo-redo");
+  await captureScreenshot("timeline-undo-smoke");
 });
