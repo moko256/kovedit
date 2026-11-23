@@ -2,7 +2,11 @@
   import { Separator } from "#lib/components/ui/separator/index.js";
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
+  import {
+    playheadToTimelineFrames,
+    projectFps,
+    timelineFramesToPlayhead,
+  } from "#lib/editor/fps.js";
   import { totalTrackFrames } from "#lib/editor/track-layout.js";
   import {
     MIN_TRACK_FRAMES,
@@ -14,6 +18,8 @@
   import TimelineTrackRow from "./TimelineTrackRow.svelte";
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();
+
+  let timelineFps = $derived(projectFps(store.project.info));
 
   let tracks = $derived(store.project.tracks);
 
@@ -34,11 +40,12 @@
   });
 
   let playheadTimelineFrame = $derived(
-    playheadToTimelineFrames(
-      store.playheadFrame,
-      projectFps(store.project.info),
-    ),
+    playheadToTimelineFrames(store.playheadFrame, timelineFps),
   );
+
+  function onRulerScrub(timelineFrame: number): void {
+    action.seek(timelineFramesToPlayhead(timelineFrame, timelineFps));
+  }
 
   let scrollEl: HTMLDivElement | undefined = $state();
   let canvasEl: HTMLDivElement | undefined = $state();
@@ -177,6 +184,8 @@
         {maxFrames}
         pixelsPerFrame={PIXELS_PER_FRAME}
         marks={rulerMarks}
+        currentFrame={playheadTimelineFrame}
+        onScrub={onRulerScrub}
       />
 
       <div class="timeline__tracks">

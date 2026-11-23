@@ -3,14 +3,72 @@
     maxFrames,
     pixelsPerFrame,
     marks,
+    currentFrame,
+    onScrub,
   }: {
     maxFrames: number;
     pixelsPerFrame: number;
     marks: number[];
+    currentFrame: number;
+    onScrub: (timelineFrame: number) => void;
   } = $props();
+
+  let rulerEl: HTMLDivElement | undefined = $state();
+  let scrubPointerId: number | null = $state(null);
+
+  let valueNow = $derived(
+    Math.min(maxFrames, Math.max(0, Math.floor(currentFrame))),
+  );
+
+  function timelineFrameFromClientX(clientX: number): number {
+    if (!rulerEl || pixelsPerFrame <= 0) {
+      return 0;
+    }
+    const rect = rulerEl.getBoundingClientRect();
+    const frame = Math.floor((clientX - rect.left) / pixelsPerFrame);
+    return Math.min(maxFrames, Math.max(0, frame));
+  }
+
+  function onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 || !rulerEl) {
+      return;
+    }
+    event.preventDefault();
+    rulerEl.setPointerCapture(event.pointerId);
+    scrubPointerId = event.pointerId;
+    onScrub(timelineFrameFromClientX(event.clientX));
+  }
+
+  function onPointerMove(event: PointerEvent): void {
+    if (scrubPointerId === null || event.pointerId !== scrubPointerId) {
+      return;
+    }
+    onScrub(timelineFrameFromClientX(event.clientX));
+  }
+
+  function onPointerUp(event: PointerEvent): void {
+    if (scrubPointerId === null || event.pointerId !== scrubPointerId) {
+      return;
+    }
+    scrubPointerId = null;
+  }
 </script>
 
-<div class="ruler" style:width="{maxFrames * pixelsPerFrame}px">
+<div
+  class="ruler"
+  bind:this={rulerEl}
+  style:width="{maxFrames * pixelsPerFrame}px"
+  role="slider"
+  aria-label="Timeline scrub"
+  aria-valuemin={0}
+  aria-valuemax={maxFrames}
+  aria-valuenow={valueNow}
+  tabindex="0"
+  onpointerdown={onPointerDown}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={onPointerUp}
+>
   {#each marks as mark (mark)}
     <div class="ruler__tick" style:left="{mark * pixelsPerFrame}px">
       <span>{mark}f</span>
@@ -25,6 +83,9 @@
     margin-left: 3rem;
     border-bottom: 1px solid #c5cbd3;
     background: #e8ebef;
+    cursor: ew-resize;
+    touch-action: none;
+    user-select: none;
   }
 
   .ruler__tick {
@@ -37,5 +98,6 @@
     color: #5f6b76;
     line-height: 1.5rem;
     white-space: nowrap;
+    pointer-events: none;
   }
 </style>

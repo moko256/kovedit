@@ -290,6 +290,14 @@ export class MainAction {
     const max = maxPlayheadFrames(this.#store.project);
     const next = Math.max(0, Math.floor(playheadFrame));
     this.#store.playheadFrame = max > 0 ? Math.min(next, max) : 0;
+    if (this.#store.playing) {
+      this.#playOriginMs = performance.now();
+      this.#playOriginFrame = this.#store.playheadFrame;
+    }
+  };
+
+  nudgePlayhead = (deltaFrames: number): void => {
+    this.seek(this.#store.playheadFrame + deltaFrames);
   };
 
   play = (): void => {

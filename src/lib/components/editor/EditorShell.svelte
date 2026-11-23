@@ -8,20 +8,71 @@
   const store = new MainStore();
   const action = new MainAction(store);
 
+  function isTextEntryTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    const tag = target.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  }
+
+  function isTransportSeekTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    return target.closest('[role="slider"][aria-label="Seek"]') !== null;
+  }
+
   function onKeyDown(event: KeyboardEvent): void {
-    if (!event.ctrlKey || event.metaKey || event.altKey) {
+    if (event.metaKey || event.altKey) {
       return;
     }
-    const key = event.key.toLowerCase();
-    if (key !== "z") {
+
+    if (event.ctrlKey) {
+      const key = event.key.toLowerCase();
+      if (key !== "z") {
+        return;
+      }
+      event.preventDefault();
+      if (event.shiftKey) {
+        action.redo();
+        return;
+      }
+      action.undo();
       return;
     }
-    event.preventDefault();
+
     if (event.shiftKey) {
-      action.redo();
       return;
     }
-    action.undo();
+
+    if (isTextEntryTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === " ") {
+      event.preventDefault();
+      action.togglePlay();
+      return;
+    }
+
+    if (isTransportSeekTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      action.nudgePlayhead(-1);
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      action.nudgePlayhead(1);
+    }
   }
 </script>
 
