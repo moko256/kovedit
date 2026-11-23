@@ -315,6 +315,7 @@ export class MainAction {
     if (this.#store.playing) {
       this.#playOriginMs = performance.now();
       this.#playOriginFrame = this.#store.playheadFrame;
+      this.#store.transportEpoch += 1;
     }
   };
 
@@ -331,6 +332,7 @@ export class MainAction {
       this.#store.playheadFrame = 0;
     }
     this.#store.playing = true;
+    this.#store.transportEpoch += 1;
     this.#startTimer();
   };
 

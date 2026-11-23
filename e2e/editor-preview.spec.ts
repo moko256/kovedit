@@ -46,6 +46,21 @@ test("preview uses DOM video and transport works", async ({
   await expect(video).toBeVisible();
   await expect(page.locator(".preview-pane canvas")).toHaveCount(0);
   await expect(video).toHaveClass(/preview-pane__video--visible/);
+  await expect(video).toHaveAttribute("data-prop-animation", /kovedit-prop-/);
+  await expect
+    .poll(async () =>
+      video.evaluate(
+        (el: HTMLVideoElement) => getComputedStyle(el).animationName,
+      ),
+    )
+    .toMatch(/kovedit-prop-/);
+  await expect
+    .poll(async () =>
+      video.evaluate(
+        (el: HTMLVideoElement) => getComputedStyle(el).animationPlayState,
+      ),
+    )
+    .toBe("paused");
   await expect
     .poll(async () => video.evaluate((el: HTMLVideoElement) => el.videoWidth))
     .toBeGreaterThan(1280);
@@ -72,6 +87,13 @@ test("preview uses DOM video and transport works", async ({
   await page.getByRole("button", { name: "Play" }).click();
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect
+    .poll(async () =>
+      video.evaluate(
+        (el: HTMLVideoElement) => getComputedStyle(el).animationPlayState,
+      ),
+    )
+    .toBe("running");
+  await expect
     .poll(async () => video.evaluate((el: HTMLVideoElement) => el.paused))
     .toBe(false);
   await expect(page.locator(".transport__frame")).toHaveText("");
@@ -81,6 +103,13 @@ test("preview uses DOM video and transport works", async ({
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+  await expect
+    .poll(async () =>
+      video.evaluate(
+        (el: HTMLVideoElement) => getComputedStyle(el).animationPlayState,
+      ),
+    )
+    .toBe("paused");
   await expect
     .poll(async () => video.evaluate((el: HTMLVideoElement) => el.paused))
     .toBe(true);
