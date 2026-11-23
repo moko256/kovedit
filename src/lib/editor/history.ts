@@ -1,3 +1,4 @@
+import type { PropertyLayer } from "./properties";
 import {
   isClipNode,
   isSpaceNode,
@@ -10,7 +11,7 @@ export const UNDO_BUFFER_SIZE = 200;
 export type HistoryIdentity = {
   trackIndex: number;
   itemIndex: number;
-  clip: ClipNode;
+  clip: ClipNode | null;
 };
 
 export type HistoryEntry = {
@@ -19,6 +20,8 @@ export type HistoryEntry = {
   after: TrackItem[];
   clipPropertiesBefore?: Map<string, unknown>;
   clipPropertiesAfter?: Map<string, unknown>;
+  trackPropertiesBefore?: PropertyLayer;
+  trackPropertiesAfter?: PropertyLayer;
 };
 
 export function cloneTrackItems(items: TrackItem[]): TrackItem[] {

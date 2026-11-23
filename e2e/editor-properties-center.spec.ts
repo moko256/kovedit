@@ -34,7 +34,7 @@ async function dropVideo(
   );
 }
 
-test("Properties pane edits clip center X/Y with undo/redo", async ({
+test("Properties pane edits object X/Y with undo/redo and inheritance", async ({
   page,
   captureScreenshot,
 }) => {
@@ -42,37 +42,47 @@ test("Properties pane edits clip center X/Y with undo/redo", async ({
   await page.goto("/");
   await dropVideo(page, samplePath, "sample.mp4");
 
-  const centerX = page.getByRole("textbox", { name: "Center X" });
-  const centerY = page.getByRole("textbox", { name: "Center Y" });
-  await expect(centerX).toBeVisible();
-  await expect(centerY).toBeVisible();
-  await expect(centerX).toHaveValue("960");
-  await expect(centerY).toHaveValue("540");
+  const positionX = page.getByRole("textbox", { name: "Position X" });
+  const positionY = page.getByRole("textbox", { name: "Position Y" });
+  await expect(positionX).toBeVisible();
+  await expect(positionY).toBeVisible();
+  await expect(positionX).toHaveValue("960");
+  await expect(positionY).toHaveValue("540");
+  await expect(positionX).toHaveAttribute("data-inherited", "true");
 
-  await centerX.fill("100");
-  await centerX.press("Enter");
-  await expect(centerX).toHaveValue("100");
-  await expect(centerY).toHaveValue("540");
+  await positionX.fill("100");
+  await positionX.press("Enter");
+  await expect(positionX).toHaveValue("100");
+  await expect(positionY).toHaveValue("540");
+  await expect(positionX).toHaveAttribute("data-inherited", "false");
 
-  await centerY.fill("200");
-  await centerY.blur();
-  await expect(centerY).toHaveValue("200");
-
-  await page.keyboard.press("Control+z");
-  await expect(centerY).toHaveValue("540");
-  await expect(centerX).toHaveValue("100");
+  await positionY.fill("200");
+  await positionY.blur();
+  await expect(positionY).toHaveValue("200");
 
   await page.keyboard.press("Control+z");
-  await expect(centerX).toHaveValue("960");
-  await expect(centerY).toHaveValue("540");
+  await expect(positionY).toHaveValue("540");
+  await expect(positionX).toHaveValue("100");
+
+  await page.keyboard.press("Control+z");
+  await expect(positionX).toHaveValue("960");
+  await expect(positionY).toHaveValue("540");
 
   await page.keyboard.press("Control+Shift+z");
-  await expect(centerX).toHaveValue("100");
-  await expect(centerY).toHaveValue("540");
+  await expect(positionX).toHaveValue("100");
+  await expect(positionY).toHaveValue("540");
 
   await page.keyboard.press("Control+Shift+z");
-  await expect(centerX).toHaveValue("100");
-  await expect(centerY).toHaveValue("200");
+  await expect(positionX).toHaveValue("100");
+  await expect(positionY).toHaveValue("200");
 
-  await captureScreenshot("properties-center-xy");
+  await page.getByRole("button", { name: "Select video track 1" }).click();
+  await expect(page.getByText("Track defaults")).toBeVisible();
+  const trackX = page.getByRole("textbox", { name: "Position X" });
+  await expect(trackX).toHaveValue("960");
+  await trackX.fill("50");
+  await trackX.press("Enter");
+  await expect(trackX).toHaveValue("50");
+
+  await captureScreenshot("properties-object-track-layers");
 });
