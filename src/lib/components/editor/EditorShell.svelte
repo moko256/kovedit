@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MainAction } from "#lib/editor/MainAction.svelte.js";
   import { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { resolveTransportHotkey } from "#lib/editor/transport-hotkeys.js";
   import PreviewPane from "./PreviewPane.svelte";
   import PropertiesPane from "./PropertiesPane.svelte";
   import Timeline from "./Timeline.svelte";
@@ -27,52 +28,34 @@
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.metaKey || event.altKey) {
+    const hotkey = resolveTransportHotkey({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      textEntry: isTextEntryTarget(event.target),
+      transportSeek: isTransportSeekTarget(event.target),
+    });
+
+    if (hotkey.kind === "none") {
       return;
     }
 
-    if (event.ctrlKey) {
-      const key = event.key.toLowerCase();
-      if (key !== "z") {
-        return;
-      }
-      event.preventDefault();
-      if (event.shiftKey) {
-        action.redo();
-        return;
-      }
+    event.preventDefault();
+    if (hotkey.kind === "undo") {
       action.undo();
       return;
     }
-
-    if (event.shiftKey) {
+    if (hotkey.kind === "redo") {
+      action.redo();
       return;
     }
-
-    if (isTextEntryTarget(event.target)) {
-      return;
-    }
-
-    if (event.key === " ") {
-      event.preventDefault();
+    if (hotkey.kind === "togglePlay") {
       action.togglePlay();
       return;
     }
-
-    if (isTransportSeekTarget(event.target)) {
-      return;
-    }
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      action.nudgePlayhead(-1);
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      action.nudgePlayhead(1);
-    }
+    action.nudgePlayhead(hotkey.delta);
   }
 </script>
 
