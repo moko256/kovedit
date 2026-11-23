@@ -10,6 +10,7 @@ export class MainStore {
   selection = $state<EditorSelection | null>(null);
   playheadFrame = $state(0);
   playing = $state(false);
+  transportEpoch = $state(0);
   undoStack = $state<HistoryEntry[]>([]);
   redoStack = $state<HistoryEntry[]>([]);
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
@@ -9,11 +10,16 @@
   import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
   import { activeClipAtPlayhead } from "#lib/editor/playhead.js";
   import {
-    resolveProperties,
-    resolvedToPreviewTransform,
-  } from "#lib/editor/properties.js";
+    animationDelayCss,
+    buildPropertyCssAnimation,
+    propertyAnimationName,
+  } from "#lib/editor/property-css-animation.js";
   import { itemStartFrame } from "#lib/editor/track-layout.js";
-  import { clipPropertyLayer, isClipNode } from "#lib/editor/types.js";
+  import {
+    clipDurationFrames,
+    clipPropertyLayer,
+    isClipNode,
+  } from "#lib/editor/types.js";
   import { VideoPreviewSession } from "#lib/editor/video-preview.js";
   import PreviewTransport from "./PreviewTransport.svelte";
 
@@ -21,41 +27,60 @@
 
   let videoEl: HTMLVideoElement | undefined = $state();
   let stageEl: HTMLDivElement | undefined = $state();
+  let keyframesHostEl: HTMLDivElement | undefined = $state();
   let session = new VideoPreviewSession();
   let hasFrame = $state(false);
   let stageWidth = $state(0);
   let stageHeight = $state(0);
+  let animationDelay = $state("0s");
 
   let active = $derived(
     activeClipAtPlayhead(store.project, store.playheadFrame),
   );
   let playing = $derived(store.playing);
+  let timelineFps = $derived(projectFps(store.project.info));
+  let activeTrackIndex = $derived(active?.trackIndex ?? -1);
+  let activeItemIndex = $derived(active?.itemIndex ?? -1);
 
-  let previewTransform = $derived.by(() => {
-    const clip = active;
-    if (!clip) {
-      return null;
+  let localFrame = $derived.by(() => {
+    const trackIndex = activeTrackIndex;
+    const itemIndex = activeItemIndex;
+    if (trackIndex < 0 || itemIndex < 0) {
+      return 0;
     }
-    const track = store.project.tracks[clip.trackIndex];
+    const track = store.project.tracks[trackIndex];
     if (!track) {
-      return null;
-    }
-    const item = track.items[clip.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return null;
+      return 0;
     }
     const timelineFrame = playheadToTimelineFrames(
       store.playheadFrame,
-      projectFps(store.project.info),
+      timelineFps,
     );
-    const start = itemStartFrame(track.items, clip.itemIndex);
-    const localFrame = Math.max(0, timelineFrame - start);
-    const resolved = resolveProperties(
-      track.properties,
-      clipPropertyLayer(item),
-      localFrame,
-    );
-    return resolvedToPreviewTransform(resolved);
+    const start = itemStartFrame(track.items, itemIndex);
+    return Math.max(0, timelineFrame - start);
+  });
+
+  let cssAnimation = $derived.by(() => {
+    const trackIndex = activeTrackIndex;
+    const itemIndex = activeItemIndex;
+    if (trackIndex < 0 || itemIndex < 0) {
+      return null;
+    }
+    const track = store.project.tracks[trackIndex];
+    if (!track) {
+      return null;
+    }
+    const item = track.items[itemIndex];
+    if (!item || !isClipNode(item)) {
+      return null;
+    }
+    return buildPropertyCssAnimation({
+      name: propertyAnimationName(trackIndex, itemIndex),
+      track: track.properties,
+      object: clipPropertyLayer(item),
+      durationFrames: Math.max(1, clipDurationFrames(item)),
+      fps: timelineFps,
+    });
   });
 
   let fitScale = $derived.by(() => {
@@ -65,6 +90,34 @@
     return Math.min(
       stageWidth / COMPOSITION_WIDTH,
       stageHeight / COMPOSITION_HEIGHT,
+    );
+  });
+
+  $effect(() => {
+    const host = keyframesHostEl;
+    const anim = cssAnimation;
+    if (!host) {
+      return;
+    }
+    let styleEl = host.querySelector("style");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      host.appendChild(styleEl);
+    }
+    styleEl.textContent = anim ? anim.keyframesCss : "";
+  });
+
+  $effect(() => {
+    const isPlaying = playing;
+    const fps = timelineFps;
+    if (!isPlaying) {
+      animationDelay = animationDelayCss(localFrame, fps);
+      return;
+    }
+    void store.transportEpoch;
+    animationDelay = animationDelayCss(
+      untrack(() => localFrame),
+      fps,
     );
   });
 
@@ -130,29 +183,24 @@
         style:height="{COMPOSITION_HEIGHT}px"
         style:transform="scale({fitScale})"
       >
+        <div class="preview-pane__keyframes" bind:this={keyframesHostEl}></div>
         <video
           class="preview-pane__video"
+          class:preview-pane__video--visible={hasFrame && !!cssAnimation}
           bind:this={videoEl}
+          data-prop-animation={cssAnimation ? cssAnimation.name : undefined}
           muted
           playsinline
           preload="auto"
-          style:left={previewTransform ? `${previewTransform.left}px` : "0"}
-          style:top={previewTransform ? `${previewTransform.top}px` : "0"}
-          style:width={previewTransform
-            ? `${previewTransform.width}px`
-            : "100%"}
-          style:height={previewTransform
-            ? `${previewTransform.height}px`
-            : "100%"}
-          style:opacity={hasFrame && previewTransform
-            ? previewTransform.opacity
-            : 0}
-          style:transform={previewTransform
-            ? `rotate(${previewTransform.rotation}deg)`
-            : "none"}
-          style:transform-origin={previewTransform
-            ? `${previewTransform.originX * 100}% ${previewTransform.originY * 100}%`
-            : "50% 50%"}
+          style:animation-name={cssAnimation ? cssAnimation.name : "none"}
+          style:animation-duration={cssAnimation
+            ? `${cssAnimation.durationSec}s`
+            : "0s"}
+          style:animation-delay={animationDelay}
+          style:animation-play-state={playing ? "running" : "paused"}
+          style:animation-timing-function="linear"
+          style:animation-iteration-count="1"
+          style:animation-fill-mode="both"
         ></video>
       </div>
     </div>
@@ -214,6 +262,10 @@
     object-fit: fill;
     background: #111418;
     pointer-events: none;
+  }
+
+  .preview-pane__video:not(.preview-pane__video--visible) {
+    opacity: 0 !important;
   }
 
   .preview-pane__empty {
