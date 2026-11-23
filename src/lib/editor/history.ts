@@ -17,6 +17,8 @@ export type HistoryEntry = {
   identity: HistoryIdentity;
   before: TrackItem[];
   after: TrackItem[];
+  clipPropertiesBefore?: Map<string, unknown>;
+  clipPropertiesAfter?: Map<string, unknown>;
 };
 
 export function cloneTrackItems(items: TrackItem[]): TrackItem[] {

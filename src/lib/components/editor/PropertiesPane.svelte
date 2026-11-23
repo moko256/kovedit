@@ -1,10 +1,18 @@
 <script lang="ts">
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
+  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import { clipName, clipPath, isClipNode } from "#lib/editor/types.js";
+  import {
+    clipCenter,
+    clipName,
+    clipPath,
+    isClipNode,
+  } from "#lib/editor/types.js";
 
-  let { store }: { store: MainStore } = $props();
+  let { store, action }: { store: MainStore; action: MainAction } = $props();
 
   let selected = $derived.by(() => {
     const selection = store.selection;
@@ -19,11 +27,64 @@
     if (!item || !isClipNode(item)) {
       return null;
     }
+    const center = clipCenter(item);
     return {
       name: clipName(item),
       path: clipPath(item),
+      trackIndex: selection.trackIndex,
+      itemIndex: selection.itemIndex,
+      centerX: center.x,
+      centerY: center.y,
     };
   });
+
+  let centerXText = $state("");
+  let centerYText = $state("");
+
+  let centerSyncKey = $derived(
+    selected
+      ? `${selected.trackIndex}:${selected.itemIndex}:${selected.centerX}:${selected.centerY}`
+      : "",
+  );
+
+  $effect(() => {
+    const key = centerSyncKey;
+    if (!selected || key === "") {
+      centerXText = "";
+      centerYText = "";
+      return;
+    }
+    centerXText = String(selected.centerX);
+    centerYText = String(selected.centerY);
+  });
+
+  function parseCoordinate(raw: string, fallback: number): number {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      return fallback;
+    }
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function commitCenter(): void {
+    if (!selected) {
+      return;
+    }
+    action.setClipCenter({
+      x: parseCoordinate(centerXText, selected.centerX),
+      y: parseCoordinate(centerYText, selected.centerY),
+    });
+  }
+
+  function onCenterKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    commitCenter();
+    (event.currentTarget as HTMLInputElement).blur();
+  }
 </script>
 
 <section class="properties-pane">
@@ -40,6 +101,39 @@
           <div class="properties-pane__row">
             <dt>Path</dt>
             <dd class="properties-pane__path">{selected.path}</dd>
+          </div>
+          <div class="properties-pane__row">
+            <dt>Center</dt>
+            <dd class="properties-pane__center">
+              <div class="properties-pane__field">
+                <Label for="clip-center-x">X</Label>
+                <Input
+                  id="clip-center-x"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  spellcheck={false}
+                  aria-label="Center X"
+                  bind:value={centerXText}
+                  onblur={commitCenter}
+                  onkeydown={onCenterKeydown}
+                />
+              </div>
+              <div class="properties-pane__field">
+                <Label for="clip-center-y">Y</Label>
+                <Input
+                  id="clip-center-y"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  spellcheck={false}
+                  aria-label="Center Y"
+                  bind:value={centerYText}
+                  onblur={commitCenter}
+                  onkeydown={onCenterKeydown}
+                />
+              </div>
+            </dd>
           </div>
         </dl>
       {/if}
@@ -107,5 +201,16 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.75rem;
     color: #52606d;
+  }
+
+  .properties-pane__center {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .properties-pane__field {
+    display: grid;
+    gap: 0.25rem;
   }
 </style>
