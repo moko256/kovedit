@@ -1,3 +1,9 @@
+import {
+  COMPOSITION_DEFAULT_CENTER_X,
+  COMPOSITION_DEFAULT_CENTER_Y,
+  normalizeCompositionCenter,
+  type CompositionCenter,
+} from "./composition";
 import { PLAYHEAD_FPS, projectFps, timelineFramesToPlayhead } from "./fps";
 import {
   cloneTrackItems,
@@ -14,7 +20,12 @@ import {
   moveClipToFrame,
 } from "./track-layout";
 import {
+  CLIP_PROP_CENTER_X,
+  CLIP_PROP_CENTER_Y,
+  clipCenter,
+  cloneClipProperties,
   isClipNode,
+  restoreClipProperties,
   type ClipNode,
   type ClipSelection,
   type TrackItem,
@@ -76,6 +87,8 @@ export class MainAction {
         ["path", path],
         ["name", file.name],
         ["durationFrames", durationFrames],
+        [CLIP_PROP_CENTER_X, COMPOSITION_DEFAULT_CENTER_X],
+        [CLIP_PROP_CENTER_Y, COMPOSITION_DEFAULT_CENTER_Y],
       ]),
     };
 
@@ -187,6 +200,54 @@ export class MainAction {
     });
   };
 
+  setClipCenter = (center: CompositionCenter): void => {
+    if (this.#pendingClipDrag) {
+      return;
+    }
+    const selection = this.#store.selection;
+    if (!selection) {
+      return;
+    }
+    const project = this.#store.project;
+    const track = project.tracks[selection.trackIndex];
+    if (!track || track.type !== "video") {
+      return;
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return;
+    }
+
+    const next = normalizeCompositionCenter(center);
+    if (!next) {
+      return;
+    }
+    const current = clipCenter(item);
+    if (current.x === next.x && current.y === next.y) {
+      return;
+    }
+
+    const before = cloneTrackItems(track.items);
+    const clipPropertiesBefore = cloneClipProperties(item);
+    item.properties.set(CLIP_PROP_CENTER_X, next.x);
+    item.properties.set(CLIP_PROP_CENTER_Y, next.y);
+    const tracks = [...project.tracks];
+    tracks[selection.trackIndex] = { type: "video", items: [...track.items] };
+    this.#store.project = { ...project, tracks };
+
+    this.#pushHistory({
+      identity: {
+        trackIndex: selection.trackIndex,
+        itemIndex: selection.itemIndex,
+        clip: item,
+      },
+      before,
+      after: cloneTrackItems(tracks[selection.trackIndex].items),
+      clipPropertiesBefore,
+      clipPropertiesAfter: cloneClipProperties(item),
+    });
+  };
+
   undo = (): void => {
     if (this.#pendingClipDrag) {
       return;
@@ -198,7 +259,12 @@ export class MainAction {
     const entry = stack[stack.length - 1];
     this.#store.undoStack = stack.slice(0, -1);
     this.#store.redoStack = [...this.#store.redoStack, entry];
-    this.#applyHistoryItems(entry.identity.trackIndex, entry.before, entry);
+    this.#applyHistoryItems(
+      entry.identity.trackIndex,
+      entry.before,
+      entry,
+      entry.clipPropertiesBefore,
+    );
   };
 
   redo = (): void => {
@@ -212,7 +278,12 @@ export class MainAction {
     const entry = stack[stack.length - 1];
     this.#store.redoStack = stack.slice(0, -1);
     this.#store.undoStack = pushUndoEntry(this.#store.undoStack, entry);
-    this.#applyHistoryItems(entry.identity.trackIndex, entry.after, entry);
+    this.#applyHistoryItems(
+      entry.identity.trackIndex,
+      entry.after,
+      entry,
+      entry.clipPropertiesAfter,
+    );
   };
 
   seek = (playheadFrame: number): void => {
@@ -255,6 +326,7 @@ export class MainAction {
     trackIndex: number,
     items: TrackItem[],
     entry: HistoryEntry,
+    clipProperties?: Map<string, unknown>,
   ): void => {
     const project = this.#store.project;
     if (trackIndex < 0 || trackIndex >= project.tracks.length) {
@@ -263,6 +335,9 @@ export class MainAction {
     const track = project.tracks[trackIndex];
     if (!track || track.type !== "video") {
       return;
+    }
+    if (clipProperties) {
+      restoreClipProperties(entry.identity.clip, clipProperties);
     }
     const nextItems = cloneTrackItems(items);
     const tracks = [...project.tracks];

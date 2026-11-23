@@ -30,7 +30,7 @@
 <div class="editor-shell">
   <div class="editor-shell__top">
     <PreviewPane {store} {action} />
-    <PropertiesPane {store} />
+    <PropertiesPane {store} {action} />
   </div>
   <div class="editor-shell__bottom">
     <Timeline {store} {action} />
