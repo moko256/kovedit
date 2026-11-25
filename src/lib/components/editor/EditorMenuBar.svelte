@@ -3,8 +3,11 @@
   import {
     FILE_MENU_ITEMS,
     FILE_MENU_LABEL,
-    noopFileMenuAction,
+    resolveFileMenuAction,
+    type FileMenuActions,
   } from "#lib/editor/file-menu.js";
+
+  let { actions = {} }: { actions?: FileMenuActions } = $props();
 </script>
 
 <div class="editor-menu-bar">
@@ -13,7 +16,9 @@
       <Menubar.Trigger>{FILE_MENU_LABEL}</Menubar.Trigger>
       <Menubar.Content>
         {#each FILE_MENU_ITEMS as item (item.id)}
-          <Menubar.Item onclick={noopFileMenuAction}>{item.text}</Menubar.Item>
+          <Menubar.Item onclick={resolveFileMenuAction(item.id, actions)}
+            >{item.text}</Menubar.Item
+          >
         {/each}
       </Menubar.Content>
     </Menubar.Menu>

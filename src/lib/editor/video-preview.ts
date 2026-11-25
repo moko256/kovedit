@@ -1,11 +1,11 @@
 const SEEK_EPSILON = 1 / 120;
 
-export class VideoPreviewSession {
+export class MediaElementPreviewSession {
   #path = "";
   #generation = 0;
 
   async show(
-    target: HTMLVideoElement,
+    target: HTMLMediaElement,
     path: string,
     timeSeconds: number,
     playing: boolean,
@@ -37,7 +37,7 @@ export class VideoPreviewSession {
     return generation === this.#generation && !target.error;
   }
 
-  clear(target: HTMLVideoElement): void {
+  clear(target: HTMLMediaElement): void {
     this.#generation += 1;
     this.#path = "";
     target.pause();
@@ -51,7 +51,7 @@ export class VideoPreviewSession {
   }
 
   async #ensure(
-    target: HTMLVideoElement,
+    target: HTMLMediaElement,
     path: string,
     playing: boolean,
   ): Promise<boolean> {
@@ -79,7 +79,7 @@ export class VideoPreviewSession {
   }
 
   async #seek(
-    target: HTMLVideoElement,
+    target: HTMLMediaElement,
     timeSeconds: number,
     generation: number,
   ): Promise<void> {
@@ -105,7 +105,7 @@ export class VideoPreviewSession {
   }
 
   #waitEvent(
-    target: HTMLVideoElement,
+    target: HTMLMediaElement,
     type: "loadeddata" | "loadedmetadata" | "seeked",
     generation: number,
   ): Promise<boolean> {
@@ -130,3 +130,5 @@ export class VideoPreviewSession {
     });
   }
 }
+
+export class VideoPreviewSession extends MediaElementPreviewSession {}

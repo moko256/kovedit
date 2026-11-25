@@ -15,11 +15,15 @@
   const menuSurface = detectMenuSurface();
   const showWebMenu = menuSurface === "web";
 
+  const fileMenuActions = {
+    export: () => action.exportProject(),
+  };
+
   onMount(() => {
     if (menuSurface !== "native") {
       return;
     }
-    void installNativeAppMenu();
+    void installNativeAppMenu(fileMenuActions);
   });
 
   function isTextEntryTarget(target: EventTarget | null): boolean {
@@ -76,7 +80,7 @@
 
 <div class={["editor-shell", showWebMenu && "editor-shell--with-menu"]}>
   {#if showWebMenu}
-    <EditorMenuBar />
+    <EditorMenuBar actions={fileMenuActions} />
   {/if}
   <div class="editor-shell__workspace">
     <div class="editor-shell__top">

@@ -1,10 +1,13 @@
 import {
   FILE_MENU_ITEMS,
   FILE_MENU_LABEL,
-  noopFileMenuAction,
+  resolveFileMenuAction,
+  type FileMenuActions,
 } from "./file-menu.js";
 
-export async function installNativeAppMenu(): Promise<void> {
+export async function installNativeAppMenu(
+  actions: FileMenuActions = {},
+): Promise<void> {
   const { Menu, Submenu } = await import("@tauri-apps/api/menu");
 
   const appMenu = await Submenu.new({
@@ -25,7 +28,7 @@ export async function installNativeAppMenu(): Promise<void> {
     items: FILE_MENU_ITEMS.map((item) => ({
       id: item.id,
       text: item.text,
-      action: noopFileMenuAction,
+      action: resolveFileMenuAction(item.id, actions),
     })),
   });
 

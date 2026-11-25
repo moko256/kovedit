@@ -8,6 +8,7 @@ import {
 import { durationFramesForFile } from "./media";
 import type { MainStore } from "./MainStore.svelte";
 import { maxPlayheadFrames } from "./playhead";
+import { exportProjectToMp4, registerMediaAsset } from "./render/index.js";
 import {
   aspectRatio,
   channelAtOrDefault,
@@ -80,9 +81,14 @@ export class MainAction {
   #playOriginFrame = 0;
   #pendingClipDrag: PendingClipDrag | null = null;
   #pendingKeyframeDrag: PendingKeyframeDrag | null = null;
+  #exporting = false;
 
   constructor(store: MainStore) {
     this.#store = store;
+  }
+
+  get exporting(): boolean {
+    return this.#exporting;
   }
 
   selectClip = (selection: Omit<ClipSelection, "type"> | null): void => {
@@ -150,6 +156,7 @@ export class MainAction {
       project.info,
     );
     const path = URL.createObjectURL(file);
+    registerMediaAsset(path, file);
     const clip = createMediaClip({
       objectType,
       path,
@@ -158,6 +165,21 @@ export class MainAction {
     });
 
     this.#commitInsertedClip(tracks, index, track, clip, frame);
+  };
+
+  exportProject = async (): Promise<void> => {
+    if (this.#exporting) {
+      return;
+    }
+    this.#exporting = true;
+    try {
+      await exportProjectToMp4({
+        project: this.#store.project,
+        download: true,
+      });
+    } finally {
+      this.#exporting = false;
+    }
   };
 
   insertTextObject = (trackIndex: number, frame: number): void => {

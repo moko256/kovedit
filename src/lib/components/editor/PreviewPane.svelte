@@ -7,80 +7,61 @@
     COMPOSITION_HEIGHT,
     COMPOSITION_WIDTH,
   } from "#lib/editor/composition.js";
-  import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
-  import { activeClipAtPlayhead } from "#lib/editor/playhead.js";
+  import { projectFps } from "#lib/editor/fps.js";
   import {
     animationDelayCss,
     buildPropertyCssAnimation,
     propertyAnimationName,
   } from "#lib/editor/property-css-animation.js";
-  import { itemStartFrame } from "#lib/editor/track-layout.js";
   import {
-    clipDurationFrames,
-    clipPropertyLayer,
-    isClipNode,
-  } from "#lib/editor/types.js";
-  import { VideoPreviewSession } from "#lib/editor/video-preview.js";
+    activeObjectsAtPlayhead,
+    buildDrawableSvg,
+    sceneObjectKey,
+    type ActiveSceneObject,
+  } from "#lib/editor/render/index.js";
+  import { MediaElementPreviewSession } from "#lib/editor/video-preview.js";
   import PreviewTransport from "./PreviewTransport.svelte";
 
   let { store, action }: { store: MainStore; action: MainAction } = $props();
 
-  let videoEl: HTMLVideoElement | undefined = $state();
   let stageEl: HTMLDivElement | undefined = $state();
   let keyframesHostEl: HTMLDivElement | undefined = $state();
-  let session = new VideoPreviewSession();
-  let hasFrame = $state(false);
   let stageWidth = $state(0);
   let stageHeight = $state(0);
-  let animationDelay = $state("0s");
+  let delayByKey = $state(new Map<string, string>());
+  let mediaReady = $state(new Map<string, boolean>());
 
-  let active = $derived(
-    activeClipAtPlayhead(store.project, store.playheadFrame),
-  );
+  const mediaSessions = new Map<string, MediaElementPreviewSession>();
+  const mediaElements = new Map<string, HTMLMediaElement>();
+
   let playing = $derived(store.playing);
   let timelineFps = $derived(projectFps(store.project.info));
-  let activeTrackIndex = $derived(active?.trackIndex ?? -1);
-  let activeItemIndex = $derived(active?.itemIndex ?? -1);
+  let activeObjects = $derived(
+    activeObjectsAtPlayhead(store.project, store.playheadFrame),
+  );
+  let drawableObjects = $derived(
+    activeObjects.filter((object) => object.drawable),
+  );
+  let audioObjects = $derived(
+    activeObjects.filter((object) => object.objectType === "audio"),
+  );
+  let previewObjects = $derived([...drawableObjects, ...audioObjects]);
 
-  let localFrame = $derived.by(() => {
-    const trackIndex = activeTrackIndex;
-    const itemIndex = activeItemIndex;
-    if (trackIndex < 0 || itemIndex < 0) {
-      return 0;
+  let objectAnimations = $derived.by(() => {
+    const map = new Map<string, ReturnType<typeof buildPropertyCssAnimation>>();
+    for (const object of drawableObjects) {
+      map.set(
+        sceneObjectKey(object),
+        buildPropertyCssAnimation({
+          name: propertyAnimationName(object.trackIndex, object.itemIndex),
+          track: object.trackProperties,
+          object: object.objectProperties,
+          durationFrames: object.durationFrames,
+          fps: timelineFps,
+        }),
+      );
     }
-    const track = store.project.tracks[trackIndex];
-    if (!track) {
-      return 0;
-    }
-    const timelineFrame = playheadToTimelineFrames(
-      store.playheadFrame,
-      timelineFps,
-    );
-    const start = itemStartFrame(track.items, itemIndex);
-    return Math.max(0, timelineFrame - start);
-  });
-
-  let cssAnimation = $derived.by(() => {
-    const trackIndex = activeTrackIndex;
-    const itemIndex = activeItemIndex;
-    if (trackIndex < 0 || itemIndex < 0) {
-      return null;
-    }
-    const track = store.project.tracks[trackIndex];
-    if (!track) {
-      return null;
-    }
-    const item = track.items[itemIndex];
-    if (!item || !isClipNode(item)) {
-      return null;
-    }
-    return buildPropertyCssAnimation({
-      name: propertyAnimationName(trackIndex, itemIndex),
-      track: track.properties,
-      object: clipPropertyLayer(item),
-      durationFrames: Math.max(1, clipDurationFrames(item)),
-      fps: timelineFps,
-    });
+    return map;
   });
 
   let fitScale = $derived.by(() => {
@@ -93,9 +74,61 @@
     );
   });
 
+  let hasVisibleFrame = $derived.by(() => {
+    if (drawableObjects.length === 0) {
+      return false;
+    }
+    return drawableObjects.some((object) => {
+      if (object.objectType === "text") {
+        return true;
+      }
+      return mediaReady.get(sceneObjectKey(object)) === true;
+    });
+  });
+
+  function textSvgMarkup(object: ActiveSceneObject): string {
+    return buildDrawableSvg({
+      kind: "text",
+      text: object.text,
+      width: Math.max(1, object.transform.width),
+      height: Math.max(1, object.transform.height),
+    });
+  }
+
+  function bindMediaElement(node: HTMLMediaElement, key: string) {
+    mediaElements.set(key, node);
+    return {
+      destroy() {
+        mediaElements.delete(key);
+        const session = mediaSessions.get(key);
+        session?.clear(node);
+      },
+    };
+  }
+
+  function sessionFor(key: string): MediaElementPreviewSession {
+    let session = mediaSessions.get(key);
+    if (!session) {
+      session = new MediaElementPreviewSession();
+      mediaSessions.set(key, session);
+    }
+    return session;
+  }
+
+  function syncDelays(objects: ActiveSceneObject[], fps: number): void {
+    const next = new Map<string, string>();
+    for (const object of objects) {
+      next.set(
+        sceneObjectKey(object),
+        animationDelayCss(object.localFrame, fps),
+      );
+    }
+    delayByKey = next;
+  }
+
   $effect(() => {
     const host = keyframesHostEl;
-    const anim = cssAnimation;
+    const animations = objectAnimations;
     if (!host) {
       return;
     }
@@ -104,19 +137,22 @@
       styleEl = document.createElement("style");
       host.appendChild(styleEl);
     }
-    styleEl.textContent = anim ? anim.keyframesCss : "";
+    styleEl.textContent = [...animations.values()]
+      .map((anim) => anim.keyframesCss)
+      .join("\n");
   });
 
   $effect(() => {
     const isPlaying = playing;
     const fps = timelineFps;
+    const objects = drawableObjects;
     if (!isPlaying) {
-      animationDelay = animationDelayCss(localFrame, fps);
+      syncDelays(objects, fps);
       return;
     }
     void store.transportEpoch;
-    animationDelay = animationDelayCss(
-      untrack(() => localFrame),
+    syncDelays(
+      untrack(() => objects),
       fps,
     );
   });
@@ -137,33 +173,73 @@
   });
 
   $effect(() => {
-    const clip = active;
-    const target = videoEl;
+    const objects = previewObjects;
     const isPlaying = playing;
-    if (!target) {
-      return;
+    const activeKeys = new Set(objects.map((object) => sceneObjectKey(object)));
+    const cancellers: Array<() => void> = [];
+
+    for (const [key, session] of [...mediaSessions]) {
+      if (activeKeys.has(key)) {
+        continue;
+      }
+      const el = mediaElements.get(key);
+      if (el) {
+        session.clear(el);
+      }
+      session.dispose();
+      mediaSessions.delete(key);
     }
-    if (!clip) {
-      session.clear(target);
-      hasFrame = false;
-      return;
+
+    const previousReady = untrack(() => mediaReady);
+    const prunedReady = new Map(
+      [...previousReady].filter(([key]) => activeKeys.has(key)),
+    );
+    if (prunedReady.size !== previousReady.size) {
+      mediaReady = prunedReady;
     }
-    let cancelled = false;
-    void session
-      .show(target, clip.path, clip.mediaTimeSeconds, isPlaying)
-      .then((ok) => {
-        if (!cancelled) {
-          hasFrame = ok;
-        }
+
+    for (const object of objects) {
+      if (object.objectType === "text") {
+        continue;
+      }
+      const key = sceneObjectKey(object);
+      const target = mediaElements.get(key);
+      if (!target || !object.path) {
+        continue;
+      }
+      let cancelled = false;
+      cancellers.push(() => {
+        cancelled = true;
       });
+      void sessionFor(key)
+        .show(target, object.path, object.mediaTimeSeconds, isPlaying)
+        .then((ok) => {
+          if (cancelled) {
+            return;
+          }
+          const current = untrack(() => mediaReady);
+          if (current.get(key) === ok) {
+            return;
+          }
+          const next = new Map(current);
+          next.set(key, ok);
+          mediaReady = next;
+        });
+    }
+
     return () => {
-      cancelled = true;
+      for (const cancel of cancellers) {
+        cancel();
+      }
     };
   });
 
   $effect(() => {
     return () => {
-      session.dispose();
+      for (const session of mediaSessions.values()) {
+        session.dispose();
+      }
+      mediaSessions.clear();
     };
   });
 </script>
@@ -184,27 +260,54 @@
         style:transform="scale({fitScale})"
       >
         <div class="preview-pane__keyframes" bind:this={keyframesHostEl}></div>
-        <video
-          class="preview-pane__video"
-          class:preview-pane__video--visible={hasFrame && !!cssAnimation}
-          bind:this={videoEl}
-          data-prop-animation={cssAnimation ? cssAnimation.name : undefined}
-          muted
-          playsinline
-          preload="auto"
-          style:animation-name={cssAnimation ? cssAnimation.name : "none"}
-          style:animation-duration={cssAnimation
-            ? `${cssAnimation.durationSec}s`
-            : "0s"}
-          style:animation-delay={animationDelay}
-          style:animation-play-state={playing ? "running" : "paused"}
-          style:animation-timing-function="linear"
-          style:animation-iteration-count="1"
-          style:animation-fill-mode="both"
-        ></video>
+        {#each previewObjects as object (sceneObjectKey(object))}
+          {@const key = sceneObjectKey(object)}
+          {@const anim = objectAnimations.get(key)}
+          {@const delay = delayByKey.get(key) ?? "0s"}
+          {#if object.objectType === "video"}
+            <video
+              class="preview-pane__object preview-pane__video"
+              class:preview-pane__object--visible={mediaReady.get(key) &&
+                !!anim}
+              class:preview-pane__video--visible={mediaReady.get(key) && !!anim}
+              use:bindMediaElement={key}
+              data-prop-animation={anim ? anim.name : undefined}
+              playsinline
+              preload="auto"
+              style:animation-name={anim ? anim.name : "none"}
+              style:animation-duration={anim ? `${anim.durationSec}s` : "0s"}
+              style:animation-delay={delay}
+              style:animation-play-state={playing ? "running" : "paused"}
+              style:animation-timing-function="linear"
+              style:animation-iteration-count="1"
+              style:animation-fill-mode="both"
+            ></video>
+          {:else if object.objectType === "audio"}
+            <audio
+              class="preview-pane__audio"
+              use:bindMediaElement={key}
+              preload="auto"
+            ></audio>
+          {:else if object.objectType === "text" && anim}
+            <div
+              class="preview-pane__object preview-pane__svg"
+              class:preview-pane__object--visible={true}
+              data-prop-animation={anim.name}
+              style:animation-name={anim.name}
+              style:animation-duration="{anim.durationSec}s"
+              style:animation-delay={delay}
+              style:animation-play-state={playing ? "running" : "paused"}
+              style:animation-timing-function="linear"
+              style:animation-iteration-count="1"
+              style:animation-fill-mode="both"
+            >
+              {@html textSvgMarkup(object)}
+            </div>
+          {/if}
+        {/each}
       </div>
     </div>
-    {#if !hasFrame}
+    {#if !hasVisibleFrame}
       <p class="preview-pane__empty">Preview</p>
     {/if}
   </div>
@@ -256,16 +359,29 @@
     transform-origin: top left;
   }
 
-  .preview-pane__video {
+  .preview-pane__object {
     position: absolute;
     box-sizing: border-box;
-    object-fit: fill;
-    background: #111418;
     pointer-events: none;
   }
 
-  .preview-pane__video:not(.preview-pane__video--visible) {
+  .preview-pane__video {
+    object-fit: fill;
+    background: #111418;
+  }
+
+  .preview-pane__svg :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .preview-pane__object:not(.preview-pane__object--visible) {
     opacity: 0 !important;
+  }
+
+  .preview-pane__audio {
+    display: none;
   }
 
   .preview-pane__empty {
