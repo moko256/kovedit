@@ -11,7 +11,8 @@
   import {
     FILE_MENU_ITEMS,
     FILE_MENU_LABEL,
-    noopFileMenuAction,
+    resolveFileMenuAction,
+    type FileMenuItemId,
   } from "#lib/editor/file-menu.js";
   import { installNativeAppMenu } from "#lib/editor/install-native-menu.js";
   import { detectMenuSurface } from "#lib/editor/menu-surface.js";
@@ -35,6 +36,13 @@
   const menuSurface = detectMenuSurface();
   const showWebMenu = menuSurface === "web";
   const propertyHandlers = propertiesPanelHandlersFromAction(action);
+  const fileMenuActions = {
+    export: () => action.exportProject(),
+  };
+
+  function onFileMenuSelect(item: { id: string; text: string }): void {
+    resolveFileMenuAction(item.id as FileMenuItemId, fileMenuActions)();
+  }
 
   let timelineFps = $derived(projectFps(store.project.info));
   let playheadTimelineFrame = $derived(
@@ -63,7 +71,7 @@
     if (menuSurface !== "native") {
       return;
     }
-    void installNativeAppMenu();
+    void installNativeAppMenu(fileMenuActions);
   });
 
   function isTextEntryTarget(target: EventTarget | null): boolean {
@@ -123,7 +131,7 @@
     <EditorMenuBar
       label={FILE_MENU_LABEL}
       items={[...FILE_MENU_ITEMS]}
-      onSelect={noopFileMenuAction}
+      onSelect={onFileMenuSelect}
     />
   {/snippet}
   {#snippet preview()}
