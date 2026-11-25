@@ -1,13 +1,16 @@
 <script lang="ts">
   import { MainAction } from "#lib/editor/MainAction.svelte.js";
   import { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { detectMenuSurface } from "#lib/editor/menu-surface.js";
   import { resolveTransportHotkey } from "#lib/editor/transport-hotkeys.js";
+  import EditorMenuBar from "./EditorMenuBar.svelte";
   import PreviewPane from "./PreviewPane.svelte";
   import PropertiesPane from "./PropertiesPane.svelte";
   import Timeline from "./Timeline.svelte";
 
   const store = new MainStore();
   const action = new MainAction(store);
+  const showWebMenu = detectMenuSurface() === "web";
 
   function isTextEntryTarget(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) {
@@ -61,13 +64,18 @@
 
 <svelte:window onkeydown={onKeyDown} />
 
-<div class="editor-shell">
-  <div class="editor-shell__top">
-    <PreviewPane {store} {action} />
-    <PropertiesPane {store} {action} />
-  </div>
-  <div class="editor-shell__bottom">
-    <Timeline {store} {action} />
+<div class={["editor-shell", showWebMenu && "editor-shell--with-menu"]}>
+  {#if showWebMenu}
+    <EditorMenuBar />
+  {/if}
+  <div class="editor-shell__workspace">
+    <div class="editor-shell__top">
+      <PreviewPane {store} {action} />
+      <PropertiesPane {store} {action} />
+    </div>
+    <div class="editor-shell__bottom">
+      <Timeline {store} {action} />
+    </div>
   </div>
 </div>
 
@@ -75,7 +83,7 @@
   .editor-shell {
     box-sizing: border-box;
     display: grid;
-    grid-template-rows: 1fr 40%;
+    grid-template-rows: 1fr;
     gap: 0.5rem;
     width: 100%;
     max-width: 100%;
@@ -85,6 +93,18 @@
     background: #d8dde4;
     color: #1f2933;
     font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  }
+
+  .editor-shell--with-menu {
+    grid-template-rows: auto 1fr;
+  }
+
+  .editor-shell__workspace {
+    display: grid;
+    grid-template-rows: 1fr 40%;
+    gap: 0.5rem;
+    min-height: 0;
+    min-width: 0;
   }
 
   .editor-shell__top {
