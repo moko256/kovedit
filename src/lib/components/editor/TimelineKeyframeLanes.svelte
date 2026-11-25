@@ -150,9 +150,7 @@
 
   .kf-lane {
     position: relative;
-    display: grid;
-    grid-template-columns: 2.2rem 1fr;
-    align-items: stretch;
+    display: block;
     border: 1px solid #c5cbd3;
     border-radius: 2px;
     background: #eef1f4;
@@ -160,19 +158,28 @@
   }
 
   .kf-lane__label {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    bottom: 0;
+    left: 0;
     display: grid;
     place-items: center;
+    width: 1.6rem;
     border-right: 1px solid #d5dae1;
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #52606d;
-    background: #e2e6eb;
+    background: rgb(226 230 235 / 92%);
+    pointer-events: none;
   }
 
   .kf-lane__track {
     position: relative;
+    width: 100%;
+    height: 100%;
     min-width: 0;
   }
 
