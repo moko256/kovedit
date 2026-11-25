@@ -351,6 +351,138 @@ export function upsertKeyframe<T>(
   );
 }
 
+export function animationEndFrame(durationFrames: number): number {
+  const duration = Math.max(1, Math.floor(durationFrames));
+  return Math.max(1, duration - 1);
+}
+
+export function isChannelAnimated<T>(
+  channel: AnimatedChannel<T> | undefined,
+): boolean {
+  return (channel?.keyframes.length ?? 0) >= 2;
+}
+
+export function channelStartFrame<T>(
+  channel: AnimatedChannel<T> | undefined,
+): number {
+  if (!channel || channel.keyframes.length === 0) {
+    return 0;
+  }
+  return Math.floor(channel.keyframes[0].frame);
+}
+
+export function channelLastFrame<T>(
+  channel: AnimatedChannel<T> | undefined,
+): number {
+  if (!channel || channel.keyframes.length === 0) {
+    return 0;
+  }
+  return Math.floor(channel.keyframes[channel.keyframes.length - 1].frame);
+}
+
+export function isEndpointKeyframeFrame<T>(
+  channel: AnimatedChannel<T>,
+  frame: number,
+): boolean {
+  if (!isChannelAnimated(channel)) {
+    return false;
+  }
+  const safeFrame = Math.floor(frame);
+  return (
+    safeFrame === channelStartFrame(channel) ||
+    safeFrame === channelLastFrame(channel)
+  );
+}
+
+export function enableChannelAnimation<T>(
+  channel: AnimatedChannel<T>,
+  durationFrames: number,
+  value: T,
+): AnimatedChannel<T> {
+  const end = animationEndFrame(durationFrames);
+  return {
+    interpolation: channel.interpolation,
+    keyframes: [
+      { frame: 0, value },
+      { frame: end, value },
+    ],
+  };
+}
+
+export function disableChannelAnimation<T>(
+  channel: AnimatedChannel<T>,
+): AnimatedChannel<T> {
+  const first = channel.keyframes[0];
+  if (!first) {
+    return {
+      interpolation: channel.interpolation,
+      keyframes: [],
+    };
+  }
+  return createStaticChannel(first.value, channel.interpolation);
+}
+
+export function moveKeyframeAtIndex<T>(
+  channel: AnimatedChannel<T>,
+  index: number,
+  toFrame: number,
+): AnimatedChannel<T> {
+  if (!isChannelAnimated(channel)) {
+    return cloneChannel(channel);
+  }
+  const normalized =
+    normalizeChannel(channel) ??
+    createStaticChannel(channel.keyframes[0].value, channel.interpolation);
+  if (index <= 0 || index >= normalized.keyframes.length - 1) {
+    return normalized;
+  }
+  const start = channelStartFrame(normalized);
+  const end = channelLastFrame(normalized);
+  const min = start + 1;
+  const max = end - 1;
+  if (min > max) {
+    return normalized;
+  }
+  let nextFrame = Math.min(max, Math.max(min, Math.floor(toFrame)));
+  const others = normalized.keyframes.filter((_, i) => i !== index);
+  while (others.some((keyframe) => keyframe.frame === nextFrame)) {
+    if (nextFrame < max) {
+      nextFrame += 1;
+    } else if (nextFrame > min) {
+      nextFrame -= 1;
+    } else {
+      return normalized;
+    }
+    if (nextFrame < min || nextFrame > max) {
+      return normalized;
+    }
+  }
+  const next = cloneChannel(normalized);
+  next.keyframes[index] = {
+    frame: nextFrame,
+    value: next.keyframes[index].value,
+  };
+  return normalizeChannel(next) ?? normalized;
+}
+
+export function moveKeyframeFrame<T>(
+  channel: AnimatedChannel<T>,
+  fromFrame: number,
+  toFrame: number,
+): AnimatedChannel<T> {
+  if (!isChannelAnimated(channel)) {
+    return cloneChannel(channel);
+  }
+  const normalized =
+    normalizeChannel(channel) ??
+    createStaticChannel(channel.keyframes[0].value, channel.interpolation);
+  const from = Math.floor(fromFrame);
+  const index = normalized.keyframes.findIndex(
+    (keyframe) => keyframe.frame === from,
+  );
+  return moveKeyframeAtIndex(normalized, index, toFrame);
+}
+
 export function setChannelInterpolation<T>(
   channel: AnimatedChannel<T>,
   interpolation: Interpolation,

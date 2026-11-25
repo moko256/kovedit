@@ -15,7 +15,7 @@ async function dropVideo(
   name: string,
 ): Promise<void> {
   const buffer = [...new Uint8Array(fs.readFileSync(filePath))];
-  const target = page.getByRole("region", { name: "Video track 1" });
+  const target = page.getByRole("region", { name: "Track 1" });
   await expect(target).toBeVisible();
   await target.evaluate(
     (el, { bytes, name, type }) => {

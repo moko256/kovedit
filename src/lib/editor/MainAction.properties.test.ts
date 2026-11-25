@@ -126,4 +126,43 @@ describe("MainAction property layers", () => {
     expect(resolved.height.value).toBe(540);
     expect(resolved.height.source).toBe("object");
   });
+
+  test("enabling animation seeds start and end; disabling keeps start", () => {
+    const { store, action, clip } = projectWithClip();
+    action.setPropertyValue("x", 100, 0);
+    action.setPropertyAnimationEnabled("x", true);
+
+    const enabled = clipPropertyLayer(clip).x;
+    expect(enabled?.keyframes).toEqual([
+      { frame: 0, value: 100 },
+      { frame: 29, value: 100 },
+    ]);
+
+    action.setPropertyValue("x", 200, 10);
+    expect(clipPropertyLayer(clip).x?.keyframes).toEqual([
+      { frame: 0, value: 100 },
+      { frame: 10, value: 200 },
+      { frame: 29, value: 100 },
+    ]);
+
+    action.movePropertyKeyframe("x", 10, 15);
+    expect(clipPropertyLayer(clip).x?.keyframes.map((k) => k.frame)).toEqual([
+      0, 15, 29,
+    ]);
+
+    action.movePropertyKeyframe("x", 0, 5);
+    expect(clipPropertyLayer(clip).x?.keyframes[0]?.frame).toBe(0);
+
+    action.setPropertyAnimationEnabled("x", false);
+    expect(clipPropertyLayer(clip).x?.keyframes).toEqual([
+      { frame: 0, value: 100 },
+    ]);
+    expect(
+      resolveProperties(
+        store.project.tracks[0].properties,
+        clipPropertyLayer(clip),
+        0,
+      ).x.value,
+    ).toBe(100);
+  });
 });
