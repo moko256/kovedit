@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { MainAction } from "#lib/editor/MainAction.svelte.js";
   import { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { installNativeAppMenu } from "#lib/editor/install-native-menu.js";
   import { detectMenuSurface } from "#lib/editor/menu-surface.js";
   import { resolveTransportHotkey } from "#lib/editor/transport-hotkeys.js";
   import EditorMenuBar from "./EditorMenuBar.svelte";
@@ -10,7 +12,15 @@
 
   const store = new MainStore();
   const action = new MainAction(store);
-  const showWebMenu = detectMenuSurface() === "web";
+  const menuSurface = detectMenuSurface();
+  const showWebMenu = menuSurface === "web";
+
+  onMount(() => {
+    if (menuSurface !== "native") {
+      return;
+    }
+    void installNativeAppMenu();
+  });
 
   function isTextEntryTarget(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) {

@@ -1,17 +1,20 @@
 <script lang="ts">
   import * as Menubar from "#lib/components/ui/menubar/index.js";
-
-  function noop(): void {}
+  import {
+    FILE_MENU_ITEMS,
+    FILE_MENU_LABEL,
+    noopFileMenuAction,
+  } from "#lib/editor/file-menu.js";
 </script>
 
 <div class="editor-menu-bar">
   <Menubar.Root aria-label="Editor menu" class="editor-menu-bar__menubar">
     <Menubar.Menu>
-      <Menubar.Trigger>ファイル</Menubar.Trigger>
+      <Menubar.Trigger>{FILE_MENU_LABEL}</Menubar.Trigger>
       <Menubar.Content>
-        <Menubar.Item onclick={noop}>開く</Menubar.Item>
-        <Menubar.Item onclick={noop}>保存</Menubar.Item>
-        <Menubar.Item onclick={noop}>エクスポート</Menubar.Item>
+        {#each FILE_MENU_ITEMS as item (item.id)}
+          <Menubar.Item onclick={noopFileMenuAction}>{item.text}</Menubar.Item>
+        {/each}
       </Menubar.Content>
     </Menubar.Menu>
   </Menubar.Root>
