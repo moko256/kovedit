@@ -20,6 +20,7 @@ playwright-report
 blob-report
 .playwright
 .playwright-cli
+storybook-static
 
 # Lockfiles / misc
 pnpm-lock.yaml

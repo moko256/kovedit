@@ -1,19 +1,31 @@
 <script lang="ts">
   import * as Menubar from "#lib/components/ui/menubar/index.js";
-  import {
-    FILE_MENU_ITEMS,
-    FILE_MENU_LABEL,
-    noopFileMenuAction,
-  } from "#lib/editor/file-menu.js";
+
+  type EditorMenuItem = {
+    id: string;
+    text: string;
+  };
+
+  let {
+    label,
+    items,
+    onSelect,
+  }: {
+    label: string;
+    items: readonly EditorMenuItem[];
+    onSelect?: (item: EditorMenuItem) => void;
+  } = $props();
 </script>
 
 <div class="editor-menu-bar">
   <Menubar.Root aria-label="Editor menu" class="editor-menu-bar__menubar">
     <Menubar.Menu>
-      <Menubar.Trigger>{FILE_MENU_LABEL}</Menubar.Trigger>
+      <Menubar.Trigger>{label}</Menubar.Trigger>
       <Menubar.Content>
-        {#each FILE_MENU_ITEMS as item (item.id)}
-          <Menubar.Item onclick={noopFileMenuAction}>{item.text}</Menubar.Item>
+        {#each items as item (item.id)}
+          <Menubar.Item onclick={() => onSelect?.(item)}
+            >{item.text}</Menubar.Item
+          >
         {/each}
       </Menubar.Content>
     </Menubar.Menu>

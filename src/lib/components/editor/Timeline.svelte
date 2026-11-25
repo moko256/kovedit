@@ -1,13 +1,7 @@
 <script lang="ts">
   import { Separator } from "#lib/components/ui/separator/index.js";
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
-  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import {
-    playheadToTimelineFrames,
-    projectFps,
-    timelineFramesToPlayhead,
-  } from "#lib/editor/fps.js";
   import { totalTrackFrames } from "#lib/editor/track-layout.js";
+  import type { Track } from "#lib/editor/types.js";
   import {
     MIN_TRACK_FRAMES,
     PIXELS_PER_FRAME,
@@ -16,12 +10,22 @@
   import TimelinePlayhead from "./TimelinePlayhead.svelte";
   import TimelineRuler from "./TimelineRuler.svelte";
   import TimelineTrackRow from "./TimelineTrackRow.svelte";
+  import type {
+    TimelineActions,
+    TimelineSelection,
+  } from "./timeline-actions.js";
 
-  let { store, action }: { store: MainStore; action: MainAction } = $props();
-
-  let timelineFps = $derived(projectFps(store.project.info));
-
-  let tracks = $derived(store.project.tracks);
+  let {
+    tracks,
+    selection,
+    playheadTimelineFrame,
+    actions,
+  }: {
+    tracks: Track[];
+    selection: TimelineSelection;
+    playheadTimelineFrame: number;
+    actions: TimelineActions;
+  } = $props();
 
   let maxFrames = $derived.by(() => {
     let max = MIN_TRACK_FRAMES;
@@ -38,14 +42,6 @@
     }
     return marks;
   });
-
-  let playheadTimelineFrame = $derived(
-    playheadToTimelineFrames(store.playheadFrame, timelineFps),
-  );
-
-  function onRulerScrub(timelineFrame: number): void {
-    action.seek(timelineFramesToPlayhead(timelineFrame, timelineFps));
-  }
 
   let scrollEl: HTMLDivElement | undefined = $state();
   let canvasEl: HTMLDivElement | undefined = $state();
@@ -185,7 +181,7 @@
         pixelsPerFrame={PIXELS_PER_FRAME}
         marks={rulerMarks}
         currentFrame={playheadTimelineFrame}
-        onScrub={onRulerScrub}
+        onScrub={actions.seekFromTimelineFrame}
       />
 
       <div class="timeline__tracks">
@@ -195,8 +191,8 @@
             {trackIndex}
             {maxFrames}
             pixelsPerFrame={PIXELS_PER_FRAME}
-            {store}
-            {action}
+            {selection}
+            {actions}
           />
         {/each}
       </div>

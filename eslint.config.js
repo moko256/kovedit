@@ -33,6 +33,7 @@ export default [
       "blob-report/**",
       ".playwright/**",
       ".playwright-cli/**",
+      "storybook-static/**",
     ],
   },
   {

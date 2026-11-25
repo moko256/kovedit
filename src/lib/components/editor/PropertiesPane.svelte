@@ -2,12 +2,8 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
-  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
   import {
     ANCHOR_OPTIONS,
-    channelAtOrDefault,
     isChannelAnimated,
     isEndpointKeyframeFrame,
     type Anchor,
@@ -16,104 +12,23 @@
     type Interpolation,
     type PropertyChannelId,
     type PropertySource,
-    type ResolvedProperties,
-    resolveProperties,
   } from "#lib/editor/properties.js";
-  import {
-    itemStartFrame,
-    totalTrackFrames,
-  } from "#lib/editor/track-layout.js";
-  import {
-    clipDurationFrames,
-    clipIsDrawable,
-    clipIsMedia,
-    clipName,
-    clipObjectType,
-    clipPath,
-    clipPlaybackRate,
-    clipPropertyLayer,
-    clipTextContent,
-    isClipNode,
-    type ObjectType,
-  } from "#lib/editor/types.js";
+  import type {
+    PropertiesPanelHandlers,
+    PropertiesPanelModel,
+  } from "./properties-panel.js";
 
-  let { store, action }: { store: MainStore; action: MainAction } = $props();
-
-  type PanelModel = {
-    kind: "clip" | "track";
-    title: string;
-    subtitle: string;
-    trackIndex: number;
-    itemIndex: number | null;
-    frame: number;
-    resolved: ResolvedProperties;
-    objectType: ObjectType | null;
-    media: boolean;
-    drawable: boolean;
-    playbackRate: number;
-    durationFrames: number;
-    text: string;
-  };
-
-  let panel = $derived.by((): PanelModel | null => {
-    const selection = store.selection;
-    if (!selection) {
-      return null;
-    }
-    const track = store.project.tracks[selection.trackIndex];
-    if (!track) {
-      return null;
-    }
-    const timelineFrame = playheadToTimelineFrames(
-      store.playheadFrame,
-      projectFps(store.project.info),
-    );
-
-    if (selection.type === "track") {
-      return {
-        kind: "track",
-        title: `Track T${selection.trackIndex + 1}`,
-        subtitle: "Track defaults",
-        trackIndex: selection.trackIndex,
-        itemIndex: null,
-        frame: timelineFrame,
-        resolved: resolveProperties(track.properties, undefined, timelineFrame),
-        objectType: null,
-        media: false,
-        drawable: true,
-        playbackRate: 1,
-        durationFrames: Math.max(2, totalTrackFrames(track.items)),
-        text: "",
-      };
-    }
-
-    const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return null;
-    }
-    const start = itemStartFrame(track.items, selection.itemIndex);
-    const localFrame = Math.max(0, timelineFrame - start);
-    const objectType = clipObjectType(item);
-    return {
-      kind: "clip",
-      title: clipName(item),
-      subtitle: objectType === "text" ? clipTextContent(item) : clipPath(item),
-      trackIndex: selection.trackIndex,
-      itemIndex: selection.itemIndex,
-      frame: localFrame,
-      resolved: resolveProperties(
-        track.properties,
-        clipPropertyLayer(item),
-        localFrame,
-      ),
-      objectType,
-      media: clipIsMedia(item),
-      drawable: clipIsDrawable(item),
-      playbackRate: clipPlaybackRate(item),
-      durationFrames: clipDurationFrames(item),
-      text: clipTextContent(item),
-    };
-  });
+  let {
+    panel,
+    getChannel,
+    handlers,
+  }: {
+    panel: PropertiesPanelModel | null;
+    getChannel: (
+      id: PropertyChannelId,
+    ) => AnimatedChannel<ChannelValueMap[PropertyChannelId]> | null;
+    handlers: PropertiesPanelHandlers;
+  } = $props();
 
   let rateText = $state("");
   let textContent = $state("");
@@ -123,29 +38,7 @@
   function channelFor(
     id: PropertyChannelId,
   ): AnimatedChannel<ChannelValueMap[PropertyChannelId]> | null {
-    if (!panel) {
-      return null;
-    }
-    const selection = store.selection;
-    if (!selection) {
-      return null;
-    }
-    const track = store.project.tracks[selection.trackIndex];
-    if (!track) {
-      return null;
-    }
-    if (selection.type === "track") {
-      return channelAtOrDefault(track.properties, id);
-    }
-    const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return null;
-    }
-    const objectLayer = clipPropertyLayer(item);
-    if (objectLayer[id]) {
-      return channelAtOrDefault(objectLayer, id);
-    }
-    return channelAtOrDefault(track.properties, id);
+    return getChannel(id);
   }
 
   function channelKey(id: PropertyChannelId): string {
@@ -271,7 +164,7 @@
     }
     const value = (event.currentTarget as HTMLSelectElement)
       .value as Interpolation;
-    action.setPropertyInterpolation(id, value);
+    handlers.setPropertyInterpolation(id, value);
   }
 
   function onAnimationToggle(id: PropertyChannelId, event: Event): void {
@@ -279,7 +172,7 @@
       return;
     }
     const checked = (event.currentTarget as HTMLInputElement).checked;
-    action.setPropertyAnimationEnabled(id, checked, panel.durationFrames);
+    handlers.setPropertyAnimationEnabled(id, checked, panel.durationFrames);
   }
 
   function commitNumericKeyframe(
@@ -296,7 +189,7 @@
       typeof existing?.value === "number"
         ? existing.value
         : panel.resolved[id].value;
-    action.setPropertyValue(id, parseNumber(raw, fallback), frame);
+    handlers.setPropertyValue(id, parseNumber(raw, fallback), frame);
   }
 
   function commitKeyframeFrame(
@@ -315,21 +208,21 @@
     if (next === fromFrame) {
       return;
     }
-    action.movePropertyKeyframe(id, fromFrame, next);
+    handlers.movePropertyKeyframe(id, fromFrame, next);
   }
 
   function commitRate(raw: string): void {
     if (!panel || !panel.media) {
       return;
     }
-    action.setPlaybackRate(parseNumber(raw, panel.playbackRate));
+    handlers.setPlaybackRate(parseNumber(raw, panel.playbackRate));
   }
 
   function commitText(raw: string): void {
     if (!panel || panel.objectType !== "text") {
       return;
     }
-    action.setTextContent(raw);
+    handlers.setTextContent(raw);
   }
 
   function channelInterpolation(id: PropertyChannelId): Interpolation {
@@ -355,7 +248,7 @@
     if (channel.keyframes.some((k) => k.frame === frame)) {
       return;
     }
-    action.setPropertyValue(id, panel.resolved[id].value, frame);
+    handlers.setPropertyValue(id, panel.resolved[id].value, frame);
   }
 
   const numericFields: {
@@ -504,7 +397,7 @@
                             : "false"}
                           value={String(keyframe.value)}
                           onchange={(event) =>
-                            action.setPropertyValue(
+                            handlers.setPropertyValue(
                               "anchor",
                               (event.currentTarget as HTMLSelectElement)
                                 .value as Anchor,
@@ -554,7 +447,7 @@
                         : "false"}
                       value={panel.resolved.anchor.value}
                       onchange={(event) =>
-                        action.setPropertyValue(
+                        handlers.setPropertyValue(
                           "anchor",
                           (event.currentTarget as HTMLSelectElement)
                             .value as Anchor,
@@ -781,7 +674,7 @@
                             aria-label={`Aspect ratio lock at frame ${keyframe.frame}`}
                             checked={Boolean(keyframe.value)}
                             onchange={(event) =>
-                              action.setPropertyValue(
+                              handlers.setPropertyValue(
                                 "aspectRatioLock",
                                 (event.currentTarget as HTMLInputElement)
                                   .checked,
@@ -820,7 +713,7 @@
                         aria-label="Aspect ratio lock"
                         checked={panel.resolved.aspectRatioLock.value}
                         onchange={(event) =>
-                          action.setPropertyValue(
+                          handlers.setPropertyValue(
                             "aspectRatioLock",
                             (event.currentTarget as HTMLInputElement).checked,
                             panel.frame,

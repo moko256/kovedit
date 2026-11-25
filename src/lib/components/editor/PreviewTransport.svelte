@@ -3,24 +3,26 @@
   import { Separator } from "#lib/components/ui/separator/index.js";
   import { Slider } from "#lib/components/ui/slider/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
-  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
-  import { PLAYHEAD_FPS } from "#lib/editor/fps.js";
-  import { maxPlayheadFrames } from "#lib/editor/playhead.js";
 
-  let { store, action }: { store: MainStore; action: MainAction } = $props();
-
-  let maxFrame = $derived(maxPlayheadFrames(store.project));
-  let playing = $derived(store.playing);
-  let seekFrame = $derived.by(() => {
-    const frame = store.playheadFrame;
-    if (!playing) {
-      return frame;
-    }
-    return Math.floor(frame / PLAYHEAD_FPS) * PLAYHEAD_FPS;
-  });
-  let seekStep = $derived(playing ? PLAYHEAD_FPS : 1);
-  let transportLabel = $derived(playing ? "Stop" : "Play");
+  let {
+    playing,
+    seekFrame,
+    maxFrame,
+    seekStep,
+    transportLabel,
+    frameLabel = null,
+    onTogglePlay,
+    onSeek,
+  }: {
+    playing: boolean;
+    seekFrame: number;
+    maxFrame: number;
+    seekStep: number;
+    transportLabel: string;
+    frameLabel?: number | null;
+    onTogglePlay: () => void;
+    onSeek: (frame: number) => void;
+  } = $props();
 </script>
 
 <Separator />
@@ -34,7 +36,7 @@
           size="sm"
           class="transport__button min-w-14"
           aria-label={transportLabel}
-          onclick={() => action.togglePlay()}
+          onclick={onTogglePlay}
         >
           {transportLabel}
         </Button>
@@ -51,15 +53,13 @@
     max={Math.max(0, maxFrame)}
     step={seekStep}
     value={seekFrame}
-    onValueChange={(value) => action.seek(value)}
+    onValueChange={onSeek}
     aria-label="Seek"
   />
-  {#if playing}
+  {#if frameLabel === null}
     <span class="transport__frame" aria-hidden="true"></span>
   {:else}
-    <span class="transport__frame" aria-live="polite"
-      >{store.playheadFrame}f</span
-    >
+    <span class="transport__frame" aria-live="polite">{frameLabel}f</span>
   {/if}
 </div>
 
