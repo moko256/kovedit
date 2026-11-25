@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import { Separator } from "#lib/components/ui/separator/index.js";
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import {
     COMPOSITION_HEIGHT,
@@ -20,9 +19,14 @@
     type ActiveSceneObject,
   } from "#lib/editor/render/index.js";
   import { MediaElementPreviewSession } from "#lib/editor/video-preview.js";
-  import PreviewTransport from "./PreviewTransport.svelte";
 
-  let { store, action }: { store: MainStore; action: MainAction } = $props();
+  let {
+    store,
+    transport,
+  }: {
+    store: MainStore;
+    transport?: Snippet;
+  } = $props();
 
   let stageEl: HTMLDivElement | undefined = $state();
   let keyframesHostEl: HTMLDivElement | undefined = $state();
@@ -311,7 +315,9 @@
       <p class="preview-pane__empty">Preview</p>
     {/if}
   </div>
-  <PreviewTransport {store} {action} />
+  {#if transport}
+    {@render transport()}
+  {/if}
 </section>
 
 <style>

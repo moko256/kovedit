@@ -1,6 +1,4 @@
 <script lang="ts">
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
-  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import { animatedChannelsForLayer } from "#lib/editor/keyframe-tracks.js";
   import { layoutTrack } from "#lib/editor/track-layout.js";
   import {
@@ -14,26 +12,29 @@
   import TimelineClip from "./TimelineClip.svelte";
   import TimelineKeyframeLanes from "./TimelineKeyframeLanes.svelte";
   import TimelineSpace from "./TimelineSpace.svelte";
+  import type {
+    TimelineActions,
+    TimelineSelection,
+  } from "./timeline-actions.js";
 
   let {
     track,
     trackIndex,
     maxFrames,
     pixelsPerFrame,
-    store,
-    action,
+    selection,
+    actions,
   }: {
     track: Track;
     trackIndex: number;
     maxFrames: number;
     pixelsPerFrame: number;
-    store: MainStore;
-    action: MainAction;
+    selection: TimelineSelection;
+    actions: TimelineActions;
   } = $props();
 
   let layout = $derived(layoutTrack(track.items));
   let empty = $derived(track.items.length === 0);
-  let selection = $derived(store.selection);
 
   let lanesByItem = $derived.by(() => {
     const map = new Map<number, ReturnType<typeof animatedChannelsForLayer>>();
@@ -98,11 +99,11 @@
     const frame = frameFromClientX(el, event.clientX);
     for (const file of files) {
       if (file.type.startsWith("video/")) {
-        await action.dropVideoFile(file, trackIndex, frame);
+        await actions.dropVideoFile(file, trackIndex, frame);
         continue;
       }
       if (file.type.startsWith("audio/")) {
-        await action.dropAudioFile(file, trackIndex, frame);
+        await actions.dropAudioFile(file, trackIndex, frame);
       }
     }
   }
@@ -134,7 +135,7 @@
   function insertText(): void {
     const frame = menu.frame;
     closeMenu();
-    action.insertTextObject(trackIndex, frame);
+    actions.insertTextObject(trackIndex, frame);
   }
 
   async function onVideoPicked(event: Event): Promise<void> {
@@ -144,7 +145,7 @@
     if (!file) {
       return;
     }
-    await action.dropVideoFile(file, trackIndex, pendingPickFrame);
+    await actions.dropVideoFile(file, trackIndex, pendingPickFrame);
   }
 
   async function onAudioPicked(event: Event): Promise<void> {
@@ -154,7 +155,7 @@
     if (!file) {
       return;
     }
-    await action.dropAudioFile(file, trackIndex, pendingPickFrame);
+    await actions.dropAudioFile(file, trackIndex, pendingPickFrame);
   }
 
   function isClipSelected(itemIndex: number): boolean {
@@ -173,7 +174,7 @@
   );
 
   function onSelectTrack(): void {
-    action.selectTrack(trackIndex);
+    actions.selectTrack(trackIndex);
   }
 </script>
 
@@ -234,11 +235,9 @@
               {trackIndex}
               itemIndex={entry.itemIndex}
               startFrame={entry.startFrame}
-              lengthFrames={entry.lengthFrames}
               selected={isClipSelected(entry.itemIndex)}
               {pixelsPerFrame}
-              {store}
-              {action}
+              {actions}
             />
             {#if lanes.length > 0}
               <TimelineKeyframeLanes
@@ -247,7 +246,7 @@
                 itemIndex={entry.itemIndex}
                 lengthFrames={entry.lengthFrames}
                 {pixelsPerFrame}
-                {action}
+                {actions}
               />
             {/if}
           </div>
