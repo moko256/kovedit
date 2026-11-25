@@ -1,32 +1,30 @@
 <script lang="ts">
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
-  import type { MainStore } from "#lib/editor/MainStore.svelte.js";
   import {
     clipName,
     clipObjectType,
     type ClipNode,
   } from "#lib/editor/types.js";
+  import type { TimelineActions } from "./timeline-actions.js";
 
   let {
     clip,
     trackIndex,
     itemIndex,
     startFrame,
-    lengthFrames,
     selected,
     pixelsPerFrame,
-    store,
-    action,
+    actions,
   }: {
     clip: ClipNode;
     trackIndex: number;
     itemIndex: number;
     startFrame: number;
-    lengthFrames: number;
     selected: boolean;
     pixelsPerFrame: number;
-    store: MainStore;
-    action: MainAction;
+    actions: Pick<
+      TimelineActions,
+      "selectClip" | "beginClipDrag" | "moveClip" | "endClipDrag"
+    >;
   } = $props();
 
   let drag: {
@@ -42,8 +40,8 @@
     event.preventDefault();
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
-    action.selectClip({ trackIndex, itemIndex });
-    action.beginClipDrag(trackIndex, itemIndex);
+    actions.selectClip({ trackIndex, itemIndex });
+    actions.beginClipDrag(trackIndex, itemIndex);
     drag = {
       originStart: startFrame,
       pointerId: event.pointerId,
@@ -55,26 +53,18 @@
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
-    const track = store.project.tracks[trackIndex];
-    if (!track) {
-      return;
-    }
-    const currentIndex = track.items.indexOf(clip);
-    if (currentIndex < 0) {
-      return;
-    }
     const deltaFrames = Math.round(
       (event.clientX - drag.originX) / pixelsPerFrame,
     );
     const nextStart = Math.max(0, drag.originStart + deltaFrames);
-    action.moveClip(trackIndex, currentIndex, nextStart);
+    actions.moveClip(trackIndex, clip, nextStart);
   }
 
   function onPointerUp(event: PointerEvent): void {
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
-    action.endClipDrag();
+    actions.endClipDrag();
     drag = null;
   }
 </script>
@@ -87,7 +77,7 @@
     { "clip--selected": selected },
   ]}
   style:width="100%"
-  onclick={() => action.selectClip({ trackIndex, itemIndex })}
+  onclick={() => actions.selectClip({ trackIndex, itemIndex })}
   onpointerdown={onPointerDown}
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}

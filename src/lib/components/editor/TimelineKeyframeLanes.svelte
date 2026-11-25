@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import {
     KEYFRAME_CHANNEL_LABELS,
     type KeyframeTrackLane,
@@ -8,6 +7,7 @@
     isEndpointKeyframeFrame,
     type PropertyChannelId,
   } from "#lib/editor/properties.js";
+  import type { TimelineActions } from "./timeline-actions.js";
 
   let {
     lanes,
@@ -15,14 +15,20 @@
     itemIndex,
     lengthFrames,
     pixelsPerFrame,
-    action,
+    actions,
   }: {
     lanes: KeyframeTrackLane[];
     trackIndex: number;
     itemIndex: number;
     lengthFrames: number;
     pixelsPerFrame: number;
-    action: MainAction;
+    actions: Pick<
+      TimelineActions,
+      | "selectClip"
+      | "beginKeyframeDrag"
+      | "movePropertyKeyframeAtIndex"
+      | "endKeyframeDrag"
+    >;
   } = $props();
 
   let drag: {
@@ -34,7 +40,7 @@
   } | null = $state(null);
 
   function selectObject(): void {
-    action.selectClip({ trackIndex, itemIndex });
+    actions.selectClip({ trackIndex, itemIndex });
   }
 
   function onKeyframePointerDown(
@@ -55,7 +61,7 @@
     }
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
-    action.beginKeyframeDrag();
+    actions.beginKeyframeDrag();
     drag = {
       channelId,
       index,
@@ -73,14 +79,14 @@
       (event.clientX - drag.originX) / pixelsPerFrame,
     );
     const nextFrame = drag.originFrame + deltaFrames;
-    action.movePropertyKeyframeAtIndex(drag.channelId, drag.index, nextFrame);
+    actions.movePropertyKeyframeAtIndex(drag.channelId, drag.index, nextFrame);
   }
 
   function onKeyframePointerUp(event: PointerEvent): void {
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
-    action.endKeyframeDrag();
+    actions.endKeyframeDrag();
     drag = null;
   }
 </script>

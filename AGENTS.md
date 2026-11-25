@@ -28,6 +28,10 @@ If you install or need new **tools that belong in the cloud agent environment** 
 
 Screenshots/video foundation for UI work: `docs/playwright.md`. Run `pnpm test:e2e`. Artifacts: `test-results/`, `playwright-report/`. Agent skill: `.agents/skills/playwright-cli` (`playwright-cli install --skills=agents`).
 
+## Storybook
+
+Presentational editor UI: `docs/storybook.md`. Run `pnpm storybook`. No Storybook build CI workflow.
+
 ## Cursor Cloud specific instructions
 
 Cloud Agents use the repo-managed environment at `.cursor/environment.json` (install via `.cursor/install.sh`: Rust stable + rustfmt/clippy, cargo-dylint + dylint-link, Tauri Linux deps, `pnpm install`, Playwright Chromium + deps, `playwright-cli` agent skills, `cargo fetch`). On boot, `.cursor/start.sh` runs `pnpm dev` on port 1420 when that port is free. After install script changes, trigger a new environment build so the snapshot picks them up.
