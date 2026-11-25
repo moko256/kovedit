@@ -86,7 +86,7 @@
     `clip--${clipObjectType(clip)}`,
     { "clip--selected": selected },
   ]}
-  style:width="{Math.max(lengthFrames, 1) * pixelsPerFrame}px"
+  style:width="100%"
   onclick={() => action.selectClip({ trackIndex, itemIndex })}
   onpointerdown={onPointerDown}
   onpointermove={onPointerMove}
@@ -99,6 +99,7 @@
 <style>
   .clip {
     flex: 0 0 auto;
+    box-sizing: border-box;
     height: 2.5rem;
     margin-block: 0.25rem;
     padding: 0 0.4rem;

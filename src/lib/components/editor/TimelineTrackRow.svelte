@@ -1,9 +1,18 @@
 <script lang="ts">
   import type { MainAction } from "#lib/editor/MainAction.svelte.js";
   import type { MainStore } from "#lib/editor/MainStore.svelte.js";
+  import { animatedChannelsForLayer } from "#lib/editor/keyframe-tracks.js";
   import { layoutTrack } from "#lib/editor/track-layout.js";
-  import { isClipNode, isSpaceNode, type Track } from "#lib/editor/types.js";
+  import {
+    clipIsDrawable,
+    clipPropertyLayer,
+    isClipNode,
+    isSpaceNode,
+    type Track,
+  } from "#lib/editor/types.js";
+  import { CLIP_BODY_HEIGHT_REM } from "./timelineConstants";
   import TimelineClip from "./TimelineClip.svelte";
+  import TimelineKeyframeLanes from "./TimelineKeyframeLanes.svelte";
   import TimelineSpace from "./TimelineSpace.svelte";
 
   let {
@@ -25,6 +34,31 @@
   let layout = $derived(layoutTrack(track.items));
   let empty = $derived(track.items.length === 0);
   let selection = $derived(store.selection);
+
+  let lanesByItem = $derived.by(() => {
+    const map = new Map<number, ReturnType<typeof animatedChannelsForLayer>>();
+    for (let i = 0; i < track.items.length; i++) {
+      const item = track.items[i];
+      if (!isClipNode(item) || !clipIsDrawable(item)) {
+        continue;
+      }
+      map.set(i, animatedChannelsForLayer(clipPropertyLayer(item)));
+    }
+    return map;
+  });
+
+  let stackHeightRem = $derived.by(() => {
+    let maxStack = 0;
+    for (const lanes of lanesByItem.values()) {
+      maxStack = Math.max(
+        maxStack,
+        lanes.reduce((sum, lane) => sum + lane.heightRem, 0),
+      );
+    }
+    return maxStack;
+  });
+
+  let rowMinHeightRem = $derived(CLIP_BODY_HEIGHT_REM + stackHeightRem);
 
   let menu: {
     open: boolean;
@@ -156,7 +190,7 @@
   }}
 />
 
-<div class="track-row">
+<div class="track-row" style:min-height="{rowMinHeightRem}rem">
   <button
     type="button"
     class={[
@@ -175,6 +209,7 @@
       role="region"
       aria-label="Track {trackIndex + 1}"
       style:width="{maxFrames * pixelsPerFrame}px"
+      style:min-height="{rowMinHeightRem}rem"
       ondragover={onDragOver}
       ondrop={onDrop}
       oncontextmenu={onContextMenu}
@@ -189,17 +224,33 @@
         {#if isSpaceNode(item)}
           <TimelineSpace lengthFrames={entry.lengthFrames} {pixelsPerFrame} />
         {:else if isClipNode(item)}
-          <TimelineClip
-            clip={item}
-            {trackIndex}
-            itemIndex={entry.itemIndex}
-            startFrame={entry.startFrame}
-            lengthFrames={entry.lengthFrames}
-            selected={isClipSelected(entry.itemIndex)}
-            {pixelsPerFrame}
-            {store}
-            {action}
-          />
+          {@const lanes = lanesByItem.get(entry.itemIndex) ?? []}
+          <div
+            class="track-row__clip-stack"
+            style:width="{Math.max(entry.lengthFrames, 1) * pixelsPerFrame}px"
+          >
+            <TimelineClip
+              clip={item}
+              {trackIndex}
+              itemIndex={entry.itemIndex}
+              startFrame={entry.startFrame}
+              lengthFrames={entry.lengthFrames}
+              selected={isClipSelected(entry.itemIndex)}
+              {pixelsPerFrame}
+              {store}
+              {action}
+            />
+            {#if lanes.length > 0}
+              <TimelineKeyframeLanes
+                {lanes}
+                {trackIndex}
+                itemIndex={entry.itemIndex}
+                lengthFrames={entry.lengthFrames}
+                {pixelsPerFrame}
+                {action}
+              />
+            {/if}
+          </div>
         {/if}
       {/each}
     </div>
@@ -282,8 +333,15 @@
   .track-row__content {
     position: relative;
     display: flex;
-    align-items: stretch;
+    align-items: flex-start;
     min-height: 3rem;
+  }
+
+  .track-row__clip-stack {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
   .track-row__drop-hint {

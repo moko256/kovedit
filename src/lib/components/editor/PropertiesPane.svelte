@@ -7,14 +7,22 @@
   import { playheadToTimelineFrames, projectFps } from "#lib/editor/fps.js";
   import {
     ANCHOR_OPTIONS,
+    channelAtOrDefault,
+    isChannelAnimated,
+    isEndpointKeyframeFrame,
     type Anchor,
+    type AnimatedChannel,
+    type ChannelValueMap,
     type Interpolation,
     type PropertyChannelId,
     type PropertySource,
     type ResolvedProperties,
     resolveProperties,
   } from "#lib/editor/properties.js";
-  import { itemStartFrame } from "#lib/editor/track-layout.js";
+  import {
+    itemStartFrame,
+    totalTrackFrames,
+  } from "#lib/editor/track-layout.js";
   import {
     clipDurationFrames,
     clipIsDrawable,
@@ -74,7 +82,7 @@
         media: false,
         drawable: true,
         playbackRate: 1,
-        durationFrames: 0,
+        durationFrames: Math.max(2, totalTrackFrames(track.items)),
         text: "",
       };
     }
@@ -107,14 +115,46 @@
     };
   });
 
-  let widthText = $state("");
-  let heightText = $state("");
-  let xText = $state("");
-  let yText = $state("");
-  let opacityText = $state("");
-  let rotationText = $state("");
   let rateText = $state("");
   let textContent = $state("");
+  let draftValues = $state<Record<string, string>>({});
+  let draftFrames = $state<Record<string, string>>({});
+
+  function channelFor(
+    id: PropertyChannelId,
+  ): AnimatedChannel<ChannelValueMap[PropertyChannelId]> | null {
+    if (!panel) {
+      return null;
+    }
+    const selection = store.selection;
+    if (!selection) {
+      return null;
+    }
+    const track = store.project.tracks[selection.trackIndex];
+    if (!track) {
+      return null;
+    }
+    if (selection.type === "track") {
+      return channelAtOrDefault(track.properties, id);
+    }
+    const item = track.items[selection.itemIndex];
+    if (!item || !isClipNode(item)) {
+      return null;
+    }
+    const objectLayer = clipPropertyLayer(item);
+    if (objectLayer[id]) {
+      return channelAtOrDefault(objectLayer, id);
+    }
+    return channelAtOrDefault(track.properties, id);
+  }
+
+  function channelKey(id: PropertyChannelId): string {
+    const channel = channelFor(id);
+    if (!channel) {
+      return `${id}:`;
+    }
+    return `${id}:${channel.keyframes.map((k) => `${k.frame}=${String(k.value)}`).join("|")}:${channel.interpolation}`;
+  }
 
   let syncKey = $derived(
     panel
@@ -127,14 +167,14 @@
           panel.playbackRate,
           panel.durationFrames,
           panel.text,
-          panel.resolved.width.value,
-          panel.resolved.height.value,
-          panel.resolved.x.value,
-          panel.resolved.y.value,
-          panel.resolved.opacity.value,
-          panel.resolved.rotation.value,
-          panel.resolved.anchor.value,
-          panel.resolved.aspectRatioLock.value,
+          channelKey("anchor"),
+          channelKey("width"),
+          channelKey("height"),
+          channelKey("x"),
+          channelKey("y"),
+          channelKey("opacity"),
+          channelKey("rotation"),
+          channelKey("aspectRatioLock"),
           panel.resolved.width.source,
           panel.resolved.height.source,
           panel.resolved.x.source,
@@ -150,24 +190,44 @@
   $effect(() => {
     const key = syncKey;
     if (!panel || key === "") {
-      widthText = "";
-      heightText = "";
-      xText = "";
-      yText = "";
-      opacityText = "";
-      rotationText = "";
       rateText = "";
       textContent = "";
+      draftValues = {};
+      draftFrames = {};
       return;
     }
-    widthText = formatNumber(panel.resolved.width.value);
-    heightText = formatNumber(panel.resolved.height.value);
-    xText = formatNumber(panel.resolved.x.value);
-    yText = formatNumber(panel.resolved.y.value);
-    opacityText = formatNumber(panel.resolved.opacity.value);
-    rotationText = formatNumber(panel.resolved.rotation.value);
     rateText = formatNumber(panel.playbackRate);
     textContent = panel.text;
+    const nextValues: Record<string, string> = {};
+    const nextFrames: Record<string, string> = {};
+    for (const id of [
+      "anchor",
+      "width",
+      "height",
+      "x",
+      "y",
+      "opacity",
+      "rotation",
+      "aspectRatioLock",
+    ] as PropertyChannelId[]) {
+      const channel = channelFor(id);
+      if (!channel) {
+        continue;
+      }
+      for (const keyframe of channel.keyframes) {
+        const draftKey = `${id}:${keyframe.frame}`;
+        nextFrames[draftKey] = String(keyframe.frame);
+        if (id === "aspectRatioLock") {
+          nextValues[draftKey] = keyframe.value ? "true" : "false";
+        } else if (id === "anchor") {
+          nextValues[draftKey] = String(keyframe.value);
+        } else {
+          nextValues[draftKey] = formatNumber(keyframe.value as number);
+        }
+      }
+    }
+    draftValues = nextValues;
+    draftFrames = nextFrames;
   });
 
   function formatNumber(value: number): string {
@@ -197,39 +257,12 @@
       : "properties-pane__value properties-pane__value--inherited";
   }
 
-  function commitNumber(
-    id: "width" | "height" | "x" | "y" | "opacity" | "rotation",
-    raw: string,
-  ): void {
-    if (!panel) {
-      return;
-    }
-    const fallback = panel.resolved[id].value;
-    action.setPropertyValue(id, parseNumber(raw, fallback), panel.frame);
-  }
-
   function onNumberKeydown(event: KeyboardEvent): void {
     if (event.key !== "Enter") {
       return;
     }
     event.preventDefault();
     (event.currentTarget as HTMLInputElement).blur();
-  }
-
-  function onAnchorChange(event: Event): void {
-    if (!panel) {
-      return;
-    }
-    const value = (event.currentTarget as HTMLSelectElement).value as Anchor;
-    action.setPropertyValue("anchor", value, panel.frame);
-  }
-
-  function onLockChange(event: Event): void {
-    if (!panel) {
-      return;
-    }
-    const checked = (event.currentTarget as HTMLInputElement).checked;
-    action.setPropertyValue("aspectRatioLock", checked, panel.frame);
   }
 
   function onInterpolationChange(id: PropertyChannelId, event: Event): void {
@@ -239,6 +272,50 @@
     const value = (event.currentTarget as HTMLSelectElement)
       .value as Interpolation;
     action.setPropertyInterpolation(id, value);
+  }
+
+  function onAnimationToggle(id: PropertyChannelId, event: Event): void {
+    if (!panel) {
+      return;
+    }
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    action.setPropertyAnimationEnabled(id, checked, panel.durationFrames);
+  }
+
+  function commitNumericKeyframe(
+    id: "width" | "height" | "x" | "y" | "opacity" | "rotation",
+    frame: number,
+    raw: string,
+  ): void {
+    if (!panel) {
+      return;
+    }
+    const channel = channelFor(id);
+    const existing = channel?.keyframes.find((k) => k.frame === frame);
+    const fallback =
+      typeof existing?.value === "number"
+        ? existing.value
+        : panel.resolved[id].value;
+    action.setPropertyValue(id, parseNumber(raw, fallback), frame);
+  }
+
+  function commitKeyframeFrame(
+    id: PropertyChannelId,
+    fromFrame: number,
+    raw: string,
+  ): void {
+    if (!panel) {
+      return;
+    }
+    const channel = channelFor(id);
+    if (!channel || isEndpointKeyframeFrame(channel, fromFrame)) {
+      return;
+    }
+    const next = Math.floor(parseNumber(raw, fromFrame));
+    if (next === fromFrame) {
+      return;
+    }
+    action.movePropertyKeyframe(id, fromFrame, next);
   }
 
   function commitRate(raw: string): void {
@@ -256,93 +333,42 @@
   }
 
   function channelInterpolation(id: PropertyChannelId): Interpolation {
+    return channelFor(id)?.interpolation ?? "linear";
+  }
+
+  function channelAnimated(id: PropertyChannelId): boolean {
+    return isChannelAnimated(channelFor(id) ?? undefined);
+  }
+
+  function addKeyframeAtPlayhead(id: PropertyChannelId): void {
     if (!panel) {
-      return "linear";
+      return;
     }
-    const selection = store.selection;
-    if (!selection) {
-      return "linear";
+    const channel = channelFor(id);
+    if (!channel || !isChannelAnimated(channel)) {
+      return;
     }
-    const track = store.project.tracks[selection.trackIndex];
-    if (!track) {
-      return "linear";
+    const frame = panel.frame;
+    if (isEndpointKeyframeFrame(channel, frame)) {
+      return;
     }
-    if (selection.type === "track") {
-      return track.properties[id]?.interpolation ?? "linear";
+    if (channel.keyframes.some((k) => k.frame === frame)) {
+      return;
     }
-    const item = track.items[selection.itemIndex];
-    if (!item || !isClipNode(item)) {
-      return "linear";
-    }
-    const objectLayer = clipPropertyLayer(item);
-    return (
-      objectLayer[id]?.interpolation ??
-      track.properties[id]?.interpolation ??
-      "linear"
-    );
+    action.setPropertyValue(id, panel.resolved[id].value, frame);
   }
 
   const numericFields: {
     id: "width" | "height" | "x" | "y" | "opacity" | "rotation";
     label: string;
     aria: string;
-    getText: () => string;
-    setText: (value: string) => void;
   }[] = [
-    {
-      id: "width",
-      label: "Width",
-      aria: "Width",
-      getText: () => widthText,
-      setText: (value) => {
-        widthText = value;
-      },
-    },
-    {
-      id: "height",
-      label: "Height",
-      aria: "Height",
-      getText: () => heightText,
-      setText: (value) => {
-        heightText = value;
-      },
-    },
-    {
-      id: "x",
-      label: "X",
-      aria: "Position X",
-      getText: () => xText,
-      setText: (value) => {
-        xText = value;
-      },
-    },
-    {
-      id: "y",
-      label: "Y",
-      aria: "Position Y",
-      getText: () => yText,
-      setText: (value) => {
-        yText = value;
-      },
-    },
-    {
-      id: "opacity",
-      label: "Opacity",
-      aria: "Opacity",
-      getText: () => opacityText,
-      setText: (value) => {
-        opacityText = value;
-      },
-    },
-    {
-      id: "rotation",
-      label: "Rotation",
-      aria: "Rotation",
-      getText: () => rotationText,
-      setText: (value) => {
-        rotationText = value;
-      },
-    },
+    { id: "width", label: "Width", aria: "Width" },
+    { id: "height", label: "Height", aria: "Height" },
+    { id: "x", label: "X", aria: "Position X" },
+    { id: "y", label: "Y", aria: "Position Y" },
+    { id: "opacity", label: "Opacity", aria: "Opacity" },
+    { id: "rotation", label: "Rotation", aria: "Rotation" },
   ];
 </script>
 
@@ -418,109 +444,402 @@
 
           {#if panel.drawable}
             <div class="properties-pane__row">
-              <dt>基準 (Anchor)</dt>
+              <dt>
+                <span>基準 (Anchor)</span>
+                <label class="properties-pane__animate">
+                  <input
+                    type="checkbox"
+                    aria-label="Animate anchor"
+                    checked={channelAnimated("anchor")}
+                    onchange={(event) => onAnimationToggle("anchor", event)}
+                  />
+                  Animate
+                </label>
+              </dt>
               <dd class={sourceClass(panel.resolved.anchor.source)}>
-                <div class="properties-pane__field-row">
-                  <select
-                    class={[
-                      "properties-pane__select",
-                      panel.kind === "clip" &&
-                      panel.resolved.anchor.source === "track"
-                        ? "properties-pane__inherited-control"
-                        : "",
-                    ]}
-                    aria-label="Anchor"
-                    data-inherited={panel.kind === "clip" &&
-                    panel.resolved.anchor.source === "track"
-                      ? "true"
-                      : "false"}
-                    value={panel.resolved.anchor.value}
-                    onchange={onAnchorChange}
-                  >
-                    {#each ANCHOR_OPTIONS as option (option)}
-                      <option value={option}>{option}</option>
+                {#if channelAnimated("anchor")}
+                  {@const channel = channelFor("anchor")}
+                  <div class="properties-pane__keyframes">
+                    {#each channel?.keyframes ?? [] as keyframe (keyframe.frame)}
+                      {@const draftKey = `anchor:${keyframe.frame}`}
+                      {@const fixed = isEndpointKeyframeFrame(
+                        channel!,
+                        keyframe.frame,
+                      )}
+                      <div class="properties-pane__keyframe">
+                        <Input
+                          type="text"
+                          inputmode="numeric"
+                          aria-label={`Anchor keyframe frame ${keyframe.frame}`}
+                          data-keyframe-frame={keyframe.frame}
+                          data-fixed={fixed ? "true" : "false"}
+                          disabled={fixed}
+                          value={draftFrames[draftKey] ??
+                            String(keyframe.frame)}
+                          oninput={(event) =>
+                            (draftFrames[draftKey] = (
+                              event.currentTarget as HTMLInputElement
+                            ).value)}
+                          onblur={() =>
+                            commitKeyframeFrame(
+                              "anchor",
+                              keyframe.frame,
+                              draftFrames[draftKey] ?? String(keyframe.frame),
+                            )}
+                          onkeydown={onNumberKeydown}
+                        />
+                        <span class="properties-pane__kv-sep">:</span>
+                        <select
+                          class={[
+                            "properties-pane__select",
+                            panel.kind === "clip" &&
+                            panel.resolved.anchor.source === "track"
+                              ? "properties-pane__inherited-control"
+                              : "",
+                          ]}
+                          aria-label={`Anchor value at frame ${keyframe.frame}`}
+                          data-inherited={panel.kind === "clip" &&
+                          panel.resolved.anchor.source === "track"
+                            ? "true"
+                            : "false"}
+                          value={String(keyframe.value)}
+                          onchange={(event) =>
+                            action.setPropertyValue(
+                              "anchor",
+                              (event.currentTarget as HTMLSelectElement)
+                                .value as Anchor,
+                              keyframe.frame,
+                            )}
+                        >
+                          {#each ANCHOR_OPTIONS as option (option)}
+                            <option value={option}>{option}</option>
+                          {/each}
+                        </select>
+                      </div>
                     {/each}
-                  </select>
-                  <select
-                    class="properties-pane__select properties-pane__select--interp"
-                    aria-label="Anchor interpolation"
-                    value={channelInterpolation("anchor")}
-                    onchange={(event) => onInterpolationChange("anchor", event)}
-                  >
-                    <option value="linear">linear</option>
-                    <option value="hold">hold</option>
-                  </select>
-                </div>
-              </dd>
-            </div>
-
-            {#each numericFields as field (field.id)}
-              <div class="properties-pane__row">
-                <dt>{field.label}</dt>
-                <dd class={sourceClass(panel.resolved[field.id].source)}>
+                    <div class="properties-pane__keyframe-actions">
+                      <button
+                        type="button"
+                        class="properties-pane__add"
+                        onclick={() => addKeyframeAtPlayhead("anchor")}
+                      >
+                        Add at playhead
+                      </button>
+                      <select
+                        class="properties-pane__select properties-pane__select--interp"
+                        aria-label="Anchor interpolation"
+                        value={channelInterpolation("anchor")}
+                        onchange={(event) =>
+                          onInterpolationChange("anchor", event)}
+                      >
+                        <option value="linear">linear</option>
+                        <option value="hold">hold</option>
+                      </select>
+                    </div>
+                  </div>
+                {:else}
                   <div class="properties-pane__field-row">
-                    <Input
-                      id={`prop-${field.id}`}
-                      type="text"
-                      inputmode="decimal"
-                      autocomplete="off"
-                      spellcheck={false}
-                      aria-label={field.aria}
+                    <select
+                      class={[
+                        "properties-pane__select",
+                        panel.kind === "clip" &&
+                        panel.resolved.anchor.source === "track"
+                          ? "properties-pane__inherited-control"
+                          : "",
+                      ]}
+                      aria-label="Anchor"
                       data-inherited={panel.kind === "clip" &&
-                      panel.resolved[field.id].source === "track"
+                      panel.resolved.anchor.source === "track"
                         ? "true"
                         : "false"}
-                      class={panel.kind === "clip" &&
-                      panel.resolved[field.id].source === "track"
-                        ? "properties-pane__inherited-control"
-                        : undefined}
-                      value={field.getText()}
-                      oninput={(event) =>
-                        field.setText(
-                          (event.currentTarget as HTMLInputElement).value,
+                      value={panel.resolved.anchor.value}
+                      onchange={(event) =>
+                        action.setPropertyValue(
+                          "anchor",
+                          (event.currentTarget as HTMLSelectElement)
+                            .value as Anchor,
+                          panel.frame,
                         )}
-                      onblur={() => commitNumber(field.id, field.getText())}
-                      onkeydown={onNumberKeydown}
-                    />
+                    >
+                      {#each ANCHOR_OPTIONS as option (option)}
+                        <option value={option}>{option}</option>
+                      {/each}
+                    </select>
                     <select
                       class="properties-pane__select properties-pane__select--interp"
-                      aria-label={`${field.aria} interpolation`}
-                      value={channelInterpolation(field.id)}
+                      aria-label="Anchor interpolation"
+                      value={channelInterpolation("anchor")}
                       onchange={(event) =>
-                        onInterpolationChange(field.id, event)}
+                        onInterpolationChange("anchor", event)}
                     >
                       <option value="linear">linear</option>
                       <option value="hold">hold</option>
                     </select>
                   </div>
+                {/if}
+              </dd>
+            </div>
+
+            {#each numericFields as field (field.id)}
+              <div class="properties-pane__row">
+                <dt>
+                  <span>{field.label}</span>
+                  <label class="properties-pane__animate">
+                    <input
+                      type="checkbox"
+                      aria-label={`Animate ${field.aria}`}
+                      checked={channelAnimated(field.id)}
+                      onchange={(event) => onAnimationToggle(field.id, event)}
+                    />
+                    Animate
+                  </label>
+                </dt>
+                <dd class={sourceClass(panel.resolved[field.id].source)}>
+                  {#if channelAnimated(field.id)}
+                    {@const channel = channelFor(field.id)}
+                    <div
+                      class="properties-pane__keyframes"
+                      data-channel={field.id}
+                    >
+                      {#each channel?.keyframes ?? [] as keyframe (keyframe.frame)}
+                        {@const draftKey = `${field.id}:${keyframe.frame}`}
+                        {@const fixed = isEndpointKeyframeFrame(
+                          channel!,
+                          keyframe.frame,
+                        )}
+                        <div class="properties-pane__keyframe">
+                          <Input
+                            type="text"
+                            inputmode="numeric"
+                            aria-label={`${field.aria} keyframe frame ${keyframe.frame}`}
+                            data-keyframe-frame={keyframe.frame}
+                            data-fixed={fixed ? "true" : "false"}
+                            disabled={fixed}
+                            value={draftFrames[draftKey] ??
+                              String(keyframe.frame)}
+                            oninput={(event) =>
+                              (draftFrames[draftKey] = (
+                                event.currentTarget as HTMLInputElement
+                              ).value)}
+                            onblur={() =>
+                              commitKeyframeFrame(
+                                field.id,
+                                keyframe.frame,
+                                draftFrames[draftKey] ?? String(keyframe.frame),
+                              )}
+                            onkeydown={onNumberKeydown}
+                          />
+                          <span class="properties-pane__kv-sep">:</span>
+                          <Input
+                            type="text"
+                            inputmode="decimal"
+                            autocomplete="off"
+                            spellcheck={false}
+                            aria-label={`${field.aria} value at frame ${keyframe.frame}`}
+                            data-inherited={panel.kind === "clip" &&
+                            panel.resolved[field.id].source === "track"
+                              ? "true"
+                              : "false"}
+                            class={panel.kind === "clip" &&
+                            panel.resolved[field.id].source === "track"
+                              ? "properties-pane__inherited-control"
+                              : undefined}
+                            value={draftValues[draftKey] ??
+                              formatNumber(keyframe.value as number)}
+                            oninput={(event) =>
+                              (draftValues[draftKey] = (
+                                event.currentTarget as HTMLInputElement
+                              ).value)}
+                            onblur={() =>
+                              commitNumericKeyframe(
+                                field.id,
+                                keyframe.frame,
+                                draftValues[draftKey] ??
+                                  formatNumber(keyframe.value as number),
+                              )}
+                            onkeydown={onNumberKeydown}
+                          />
+                        </div>
+                      {/each}
+                      <div class="properties-pane__keyframe-actions">
+                        <button
+                          type="button"
+                          class="properties-pane__add"
+                          onclick={() => addKeyframeAtPlayhead(field.id)}
+                        >
+                          Add at playhead
+                        </button>
+                        <select
+                          class="properties-pane__select properties-pane__select--interp"
+                          aria-label={`${field.aria} interpolation`}
+                          value={channelInterpolation(field.id)}
+                          onchange={(event) =>
+                            onInterpolationChange(field.id, event)}
+                        >
+                          <option value="linear">linear</option>
+                          <option value="hold">hold</option>
+                        </select>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="properties-pane__field-row">
+                      <Input
+                        id={`prop-${field.id}`}
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        spellcheck={false}
+                        aria-label={field.aria}
+                        data-inherited={panel.kind === "clip" &&
+                        panel.resolved[field.id].source === "track"
+                          ? "true"
+                          : "false"}
+                        class={panel.kind === "clip" &&
+                        panel.resolved[field.id].source === "track"
+                          ? "properties-pane__inherited-control"
+                          : undefined}
+                        value={draftValues[`${field.id}:0`] ??
+                          formatNumber(panel.resolved[field.id].value)}
+                        oninput={(event) =>
+                          (draftValues[`${field.id}:0`] = (
+                            event.currentTarget as HTMLInputElement
+                          ).value)}
+                        onblur={() =>
+                          commitNumericKeyframe(
+                            field.id,
+                            0,
+                            draftValues[`${field.id}:0`] ??
+                              formatNumber(panel.resolved[field.id].value),
+                          )}
+                        onkeydown={onNumberKeydown}
+                      />
+                      <select
+                        class="properties-pane__select properties-pane__select--interp"
+                        aria-label={`${field.aria} interpolation`}
+                        value={channelInterpolation(field.id)}
+                        onchange={(event) =>
+                          onInterpolationChange(field.id, event)}
+                      >
+                        <option value="linear">linear</option>
+                        <option value="hold">hold</option>
+                      </select>
+                    </div>
+                  {/if}
                 </dd>
               </div>
             {/each}
 
             <div class="properties-pane__row">
-              <dt>Aspect Lock</dt>
-              <dd class={sourceClass(panel.resolved.aspectRatioLock.source)}>
-                <div class="properties-pane__field-row">
-                  <label class="properties-pane__check">
-                    <input
-                      type="checkbox"
-                      aria-label="Aspect ratio lock"
-                      checked={panel.resolved.aspectRatioLock.value}
-                      onchange={onLockChange}
-                    />
-                    Lock width/height
-                  </label>
-                  <select
-                    class="properties-pane__select properties-pane__select--interp"
-                    aria-label="Aspect ratio lock interpolation"
-                    value={channelInterpolation("aspectRatioLock")}
+              <dt>
+                <span>Aspect Lock</span>
+                <label class="properties-pane__animate">
+                  <input
+                    type="checkbox"
+                    aria-label="Animate aspect ratio lock"
+                    checked={channelAnimated("aspectRatioLock")}
                     onchange={(event) =>
-                      onInterpolationChange("aspectRatioLock", event)}
-                  >
-                    <option value="linear">linear</option>
-                    <option value="hold">hold</option>
-                  </select>
-                </div>
+                      onAnimationToggle("aspectRatioLock", event)}
+                  />
+                  Animate
+                </label>
+              </dt>
+              <dd class={sourceClass(panel.resolved.aspectRatioLock.source)}>
+                {#if channelAnimated("aspectRatioLock")}
+                  {@const channel = channelFor("aspectRatioLock")}
+                  <div class="properties-pane__keyframes">
+                    {#each channel?.keyframes ?? [] as keyframe (keyframe.frame)}
+                      {@const draftKey = `aspectRatioLock:${keyframe.frame}`}
+                      {@const fixed = isEndpointKeyframeFrame(
+                        channel!,
+                        keyframe.frame,
+                      )}
+                      <div class="properties-pane__keyframe">
+                        <Input
+                          type="text"
+                          inputmode="numeric"
+                          aria-label={`Aspect lock keyframe frame ${keyframe.frame}`}
+                          data-fixed={fixed ? "true" : "false"}
+                          disabled={fixed}
+                          value={draftFrames[draftKey] ??
+                            String(keyframe.frame)}
+                          oninput={(event) =>
+                            (draftFrames[draftKey] = (
+                              event.currentTarget as HTMLInputElement
+                            ).value)}
+                          onblur={() =>
+                            commitKeyframeFrame(
+                              "aspectRatioLock",
+                              keyframe.frame,
+                              draftFrames[draftKey] ?? String(keyframe.frame),
+                            )}
+                          onkeydown={onNumberKeydown}
+                        />
+                        <span class="properties-pane__kv-sep">:</span>
+                        <label class="properties-pane__check">
+                          <input
+                            type="checkbox"
+                            aria-label={`Aspect ratio lock at frame ${keyframe.frame}`}
+                            checked={Boolean(keyframe.value)}
+                            onchange={(event) =>
+                              action.setPropertyValue(
+                                "aspectRatioLock",
+                                (event.currentTarget as HTMLInputElement)
+                                  .checked,
+                                keyframe.frame,
+                              )}
+                          />
+                          Lock
+                        </label>
+                      </div>
+                    {/each}
+                    <div class="properties-pane__keyframe-actions">
+                      <button
+                        type="button"
+                        class="properties-pane__add"
+                        onclick={() => addKeyframeAtPlayhead("aspectRatioLock")}
+                      >
+                        Add at playhead
+                      </button>
+                      <select
+                        class="properties-pane__select properties-pane__select--interp"
+                        aria-label="Aspect ratio lock interpolation"
+                        value={channelInterpolation("aspectRatioLock")}
+                        onchange={(event) =>
+                          onInterpolationChange("aspectRatioLock", event)}
+                      >
+                        <option value="linear">linear</option>
+                        <option value="hold">hold</option>
+                      </select>
+                    </div>
+                  </div>
+                {:else}
+                  <div class="properties-pane__field-row">
+                    <label class="properties-pane__check">
+                      <input
+                        type="checkbox"
+                        aria-label="Aspect ratio lock"
+                        checked={panel.resolved.aspectRatioLock.value}
+                        onchange={(event) =>
+                          action.setPropertyValue(
+                            "aspectRatioLock",
+                            (event.currentTarget as HTMLInputElement).checked,
+                            panel.frame,
+                          )}
+                      />
+                      Lock width/height
+                    </label>
+                    <select
+                      class="properties-pane__select properties-pane__select--interp"
+                      aria-label="Aspect ratio lock interpolation"
+                      value={channelInterpolation("aspectRatioLock")}
+                      onchange={(event) =>
+                        onInterpolationChange("aspectRatioLock", event)}
+                    >
+                      <option value="linear">linear</option>
+                      <option value="hold">hold</option>
+                    </select>
+                  </div>
+                {/if}
               </dd>
             </div>
           {/if}
@@ -572,6 +891,10 @@
   }
 
   .properties-pane__row dt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.03em;
@@ -606,6 +929,58 @@
     grid-template-columns: 1fr auto;
     gap: 0.4rem;
     align-items: center;
+  }
+
+  .properties-pane__animate {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #52606d;
+    cursor: pointer;
+  }
+
+  .properties-pane__keyframes {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .properties-pane__keyframe {
+    display: grid;
+    grid-template-columns: 3.25rem auto 1fr;
+    gap: 0.3rem;
+    align-items: center;
+  }
+
+  .properties-pane__kv-sep {
+    color: #8a93a0;
+    font-weight: 600;
+  }
+
+  .properties-pane__keyframe-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .properties-pane__add {
+    margin: 0;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid #c5cbd3;
+    border-radius: 0.4rem;
+    background: #eef1f4;
+    color: #1f2933;
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+
+  .properties-pane__add:hover {
+    background: #e2e6eb;
   }
 
   .properties-pane__select {

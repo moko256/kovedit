@@ -1,8 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
+  animationEndFrame,
   createDefaultTrackProperties,
   createStaticChannel,
+  disableChannelAnimation,
+  enableChannelAnimation,
   evaluateChannel,
+  isChannelAnimated,
+  isEndpointKeyframeFrame,
+  moveKeyframeFrame,
   proportionalHeight,
   proportionalWidth,
   resolveProperties,
@@ -99,5 +105,62 @@ describe("upsertKeyframe", () => {
       { frame: 0, value: 10 },
       { frame: 5, value: 30 },
     ]);
+  });
+});
+
+describe("channel animation enable/disable", () => {
+  test("enable seeds fixed start and end with the same value", () => {
+    const channel = createStaticChannel(42);
+    const enabled = enableChannelAnimation(channel, 30, 42);
+    expect(isChannelAnimated(enabled)).toBe(true);
+    expect(enabled.keyframes).toEqual([
+      { frame: 0, value: 42 },
+      { frame: animationEndFrame(30), value: 42 },
+    ]);
+    expect(isEndpointKeyframeFrame(enabled, 0)).toBe(true);
+    expect(isEndpointKeyframeFrame(enabled, animationEndFrame(30))).toBe(true);
+  });
+
+  test("disable keeps only the first keyframe value", () => {
+    const channel = {
+      interpolation: "linear" as const,
+      keyframes: [
+        { frame: 0, value: 10 },
+        { frame: 5, value: 50 },
+        { frame: 20, value: 90 },
+      ],
+    };
+    const disabled = disableChannelAnimation(channel);
+    expect(isChannelAnimated(disabled)).toBe(false);
+    expect(disabled.keyframes).toEqual([{ frame: 0, value: 10 }]);
+  });
+
+  test("mid keyframes can move; endpoints stay fixed", () => {
+    const channel = {
+      interpolation: "linear" as const,
+      keyframes: [
+        { frame: 0, value: 0 },
+        { frame: 5, value: 50 },
+        { frame: 20, value: 100 },
+      ],
+    };
+    expect(moveKeyframeFrame(channel, 0, 3).keyframes[0].frame).toBe(0);
+    expect(moveKeyframeFrame(channel, 20, 15).keyframes.at(-1)?.frame).toBe(20);
+    const moved = moveKeyframeFrame(channel, 5, 12);
+    expect(moved.keyframes.map((k) => k.frame)).toEqual([0, 12, 20]);
+    expect(moved.keyframes[1].value).toBe(50);
+  });
+
+  test("mid keyframe move clamps between endpoints", () => {
+    const channel = {
+      interpolation: "linear" as const,
+      keyframes: [
+        { frame: 0, value: 0 },
+        { frame: 5, value: 50 },
+        { frame: 20, value: 100 },
+      ],
+    };
+    expect(moveKeyframeFrame(channel, 5, -3).keyframes[1].frame).toBe(1);
+    expect(moveKeyframeFrame(channel, 5, 99).keyframes[1].frame).toBe(19);
   });
 });
