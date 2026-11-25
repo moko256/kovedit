@@ -37,6 +37,7 @@
 
   const mediaSessions = new Map<string, MediaElementPreviewSession>();
   const mediaElements = new Map<string, HTMLMediaElement>();
+  let mediaElementEpoch = $state(0);
 
   let playing = $derived(store.playing);
   let timelineFps = $derived(projectFps(store.project.info));
@@ -101,9 +102,11 @@
 
   function bindMediaElement(node: HTMLMediaElement, key: string) {
     mediaElements.set(key, node);
+    mediaElementEpoch += 1;
     return {
       destroy() {
         mediaElements.delete(key);
+        mediaElementEpoch += 1;
         const session = mediaSessions.get(key);
         session?.clear(node);
       },
@@ -177,6 +180,7 @@
   });
 
   $effect(() => {
+    void mediaElementEpoch;
     const objects = previewObjects;
     const isPlaying = playing;
     const activeKeys = new Set(objects.map((object) => sceneObjectKey(object)));
